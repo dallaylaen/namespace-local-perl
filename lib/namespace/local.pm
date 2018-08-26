@@ -15,7 +15,6 @@ sub import {
     };
 
     on_scope_end {
-        warn "Reached end";
         erase_syms( $caller );
         foreach my $name (@names) {
             restore_glob( $caller, $name, $content{$name} )
@@ -61,8 +60,6 @@ sub restore_glob {
     foreach my $type ( @TYPES ) {
         defined $copy->{$type} or next;
         no strict 'refs';
-#        no warnings 'redefine';
-#        no warnings 'prototype';
         *{ $package."::".$name } = $copy->{$type}
     };
 };
