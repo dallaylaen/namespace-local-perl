@@ -3,24 +3,24 @@ package namespace::local;
 use strictures 2;
 use B::Hooks::EndOfScope 'on_scope_end';
 
-use Data::Dumper;
-
 sub import {
     my $caller = caller;
 
     my @names = get_syms( $caller );
 
     my %content;
-    $content{$_} = save_glob( $caller, $_ )
-        for @names;
+    foreach my $name( @names ) {
+        $content{$name} = save_glob( $caller, $name );
+    };
 
-    warn join " ", sort grep { !m,::|/, } keys %content;
+    warn "Got names: ".join " ", sort grep { !m,::|/, } @names;
 
     on_scope_end {
         warn "Reached end";
         erase_syms( $caller );
-        restore_glob( $caller, $_, $content{$_} )
-            for @names;
+        foreach my $name (@names) {
+            restore_glob( $caller, $name, $content{$name} )
+        };
     };
 };
 
@@ -43,12 +43,11 @@ sub save_glob {
     my ($package, $name) = @_;
     my $copy;
 
-    {
+    foreach my $type (@TYPES) {
         no strict 'refs';
-        $copy->{$_} = *{$package."::".$name}{$_} for @TYPES;
+        my $value = *{$package."::".$name}{$type};
+        $copy->{$type} = $value if defined $value;
     };
-
-    defined $copy->{$_} or delete $copy->{$_} for keys %$copy;
 
     return $copy;
 };
@@ -58,11 +57,11 @@ sub restore_glob {
     die "ouch" unless ref $copy eq 'HASH';
 
     warn "Restoring $package :: $name as ".join " ", sort keys %$copy;
-#    warn "Restoring sub $name" if $copy->{CODE};
 
     no strict 'refs';
-    defined $copy->{$_} and *{ $package."::".$name } = $copy->{$_}
-        for @TYPES;
+    foreach my $type ( keys %$copy ) {
+        *{ $package."::".$name } = $copy->{$type}
+    };
 };
 
 1;
