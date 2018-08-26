@@ -61,11 +61,18 @@ sub import {
     };
 };
 
+my %let_go;
+foreach my $name(qw(_ a b)) {
+    $let_go{$name}++;
+};
+
 sub _get_syms {
     my $package = shift;
 
     no strict 'refs';
-    return sort grep { /^\w+$/ } keys %{ $package."::" };
+    return sort grep {
+        /^\w+$/ and !/^[0-9]+$/ and !$let_go{$_}
+    } keys %{ $package."::" };
 };
 
 sub _erase_syms {
