@@ -39,15 +39,27 @@ None.
 The module will only touch symbols that match /^\w+$/, i.e. those consisting
 of word characters.
 
+Additionally, it skips _, a, b, and all numbers, to avoid breaking things.
+More exceptions MAY be added in the future (e.g. ARGV).
+
 =cut 
 
+# this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
+
+# how it works:
+# 1) upon use, create a copy of caller's symbol table
+# 2) upon use, restore the symbol table from backup (see comments below)
+# 3) upon leaving scope, restore the table again thus erasing
+#    all imports that followed the use of this module
 
 sub import {
     my $caller = caller;
 
     my @names = _get_syms( $caller );
 
+    # Shallow copy of symbol table does not work for all cases,
+    #     or it would've been just '%content = %{ $caller."::" }
     my %content;
     foreach my $name( @names ) {
         $content{$name} = _save_glob( $caller, $name );
@@ -72,11 +84,20 @@ sub import {
     };
 };
 
+# Skip some global symbols to avoid breaking unrelated things
+# This list is to grow :'(
 my %let_go;
 foreach my $name(qw(_ a b)) {
     $let_go{$name}++;
 };
 
+# in: package name
+# out: sorted & filtered list of symbols
+
+# FIXME needs explanation
+# We really need to filter because copying ALL table
+#     was preventing on_scope_end from execution
+#     (accedental reference count increase?..)
 sub _get_syms {
     my $package = shift;
 
@@ -86,6 +107,9 @@ sub _get_syms {
     } keys %{ $package."::" };
 };
 
+# In: package
+# Out: (none)
+# Side effect: destroys symbol table
 sub _erase_syms {
     my $package = shift;
 
@@ -97,6 +121,9 @@ sub _erase_syms {
 
 # Don't touch NAME, PACKAGE, and GLOB itself
 my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
+
+# In: package, symbol
+# Out: a hash with glob content
 sub _save_glob {
     my ($package, $name) = @_;
     my $copy;
@@ -110,8 +137,12 @@ sub _save_glob {
     return $copy;
 };
 
+# In: package, symbol, hash
+# Out: (none)
+# Side effect: recreates *package::symbol
 sub _restore_glob {
     my ($package, $name, $copy) = @_;
+    # TODO better input validation needed
     die "ouch" unless ref $copy eq 'HASH';
 
     foreach my $type ( @TYPES ) {
@@ -126,6 +157,8 @@ sub _restore_glob {
 Konstantin S. Uvarin, C<< <khedin at gmail.com> >>
 
 =head1 BUGS
+
+This is experimental module.
 
 Please report any bugs or feature requests to C<bug-namespace-local at rt.cpan.org>, or through
 the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=namespace-local>.  I will be notified, and then you'll
@@ -161,8 +194,9 @@ L<http://search.cpan.org/dist/namespace-local/>
 =back
 
 
-=head1 ACKNOWLEDGEMENTS
+=head1 SEE ALSO
 
+L<namespace::clean>
 
 =head1 LICENSE AND COPYRIGHT
 
