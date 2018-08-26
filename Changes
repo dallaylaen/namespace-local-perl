@@ -1,0 +1,5 @@
+Revision history for namespace-local
+
+0.01    Sun Aug 26 2018
+        first version, resets symbol table on use line & on scope exit
+
