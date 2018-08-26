@@ -1,6 +1,7 @@
 package namespace::local;
 
-use strictures 2;
+use strict;
+use warnings;
 use B::Hooks::EndOfScope 'on_scope_end';
 
 sub import {
@@ -12,8 +13,6 @@ sub import {
     foreach my $name( @names ) {
         $content{$name} = save_glob( $caller, $name );
     };
-
-    warn "Got names: ".join " ", sort grep { !m,::|/, } @names;
 
     on_scope_end {
         warn "Reached end";
@@ -28,17 +27,20 @@ sub get_syms {
     my $package = shift;
 
     no strict 'refs';
-    return keys %{ $package."::" };
+    return sort grep { /^\w+$/ } keys %{ $package."::" };
 };
 
 sub erase_syms {
     my $package = shift;
 
-    no strict 'refs';
-    %{ $package."::" } = ();
+    foreach my $name( get_syms( $package ) ) {
+        no strict 'refs';
+        delete ${ $package."::" }{$name};
+    };
 };
 
-my @TYPES = qw(SCALAR ARRAY HASH CODE);
+# Don't touch NAME, PACKAGE, and GLOB itself
+my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 sub save_glob {
     my ($package, $name) = @_;
     my $copy;
@@ -56,10 +58,11 @@ sub restore_glob {
     my ($package, $name, $copy) = @_;
     die "ouch" unless ref $copy eq 'HASH';
 
-    warn "Restoring $package :: $name as ".join " ", sort keys %$copy;
-
-    no strict 'refs';
-    foreach my $type ( keys %$copy ) {
+    foreach my $type ( @TYPES ) {
+        defined $copy->{$type} or next;
+        no strict 'refs';
+#        no warnings 'redefine';
+#        no warnings 'prototype';
         *{ $package."::".$name } = $copy->{$type}
     };
 };

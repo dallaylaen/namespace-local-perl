@@ -7,17 +7,14 @@ use Test::Exception;
 use Assert::Refute {};
 
 my $report = try_refute {
-    use namespace::local "like";
-    use Assert::Refute qw(like ok);
+    use namespace::local;
+    use Assert::Refute qw(like unlike);
 
-    like "foo", qr/bar/, "A failed test";
+    like "foo", "bar", "FAILED: like should be confined";
+    unlike "foo", qr/foo/, "FAILED: unlike should be confined";
 };
 
-is $report->get_sign, "tNd", "report contains failed test";
+is $report->get_sign, "tNNd", "report contains failed test";
 like "foo", qr/(.)\1/, "normal like here";
-
-throws_ok {
-    like "#Anchored", "Anchored", "FAILED! This is A::R like";
-} "like does not accept plain scalar";
 
 done_testing;
