@@ -17,7 +17,7 @@ do {
 };
 
 throws_ok {
-        is blessed( bless {}, "Foo" ), "Foo", "blessed round-trip";
+        is blessed( bless {}, "Foo" ), "Bar", "blessed round-trip";
 } qr/Undefined subroutine.*main::blessed/;
 
 lives_ok {
