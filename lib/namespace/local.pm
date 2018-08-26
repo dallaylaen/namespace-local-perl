@@ -39,10 +39,11 @@ None.
 The module will only touch symbols that match /^\w+$/, i.e. those consisting
 of word characters.
 
-Additionally, it skips _, a, b, and all numbers, to avoid breaking things.
-More exceptions MAY be added in the future (e.g. ARGV).
+Additionally, it skips C<_>, C<a>, C<b>, and all numbers,
+to avoid breaking things.
+More exceptions MAY be added in the future (e.g. C<ARGV>).
 
-=cut 
+=cut
 
 # this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
@@ -101,10 +102,11 @@ foreach my $name(qw(_ a b)) {
 sub _get_syms {
     my $package = shift;
 
-    no strict 'refs';
-    return sort grep {
+    no strict 'refs'; ## no critic
+    my @list = sort grep {
         /^\w+$/ and !/^[0-9]+$/ and !$let_go{$_}
     } keys %{ $package."::" };
+    return @list;
 };
 
 # In: package
@@ -114,7 +116,7 @@ sub _erase_syms {
     my $package = shift;
 
     foreach my $name( _get_syms( $package ) ) {
-        no strict 'refs';
+        no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
 };
@@ -129,7 +131,7 @@ sub _save_glob {
     my $copy;
 
     foreach my $type (@TYPES) {
-        no strict 'refs';
+        no strict 'refs'; ## no critic
         my $value = *{$package."::".$name}{$type};
         $copy->{$type} = $value if defined $value;
     };
@@ -147,7 +149,7 @@ sub _restore_glob {
 
     foreach my $type ( @TYPES ) {
         defined $copy->{$type} or next;
-        no strict 'refs';
+        no strict 'refs'; ## no critic
         *{ $package."::".$name } = $copy->{$type}
     };
 };
@@ -166,7 +168,7 @@ automatically be notified of progress on your bug as I make changes.
 
 =head1 SUPPORT
 
-You can find documentation for this module with the perldoc command.
+You can find documentation for this module with the C<perldoc> command.
 
     perldoc namespace::local
 
