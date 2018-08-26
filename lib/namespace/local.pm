@@ -53,6 +53,17 @@ sub import {
         $content{$name} = _save_glob( $caller, $name );
     };
 
+    # FIXME UGLY HACK
+    # Immediate backup-and-restore of symbol table
+    #     somehow forces binding of symbols
+    #     above 'use namespace::local' line
+    #     thus preventing subsequent imports from leaking upwards
+    # I do not know why it works, it shouldn't.
+    _erase_syms( $caller );
+    foreach my $name (@names) {
+        _restore_glob( $caller, $name, $content{$name} )
+    };
+
     on_scope_end {
         _erase_syms( $caller );
         foreach my $name (@names) {

@@ -52,10 +52,7 @@ sub third {
     frobnicate();
 };
 
-TODO: {
-    local $TODO = "leaks upward, need fix";
-    is first(), 42, "Before scope";
-};
+is first(), 42, "Before scope";
 is second(), 137, "Within scope";
 is third(), 42, "After scope";
 
