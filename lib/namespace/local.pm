@@ -36,8 +36,26 @@ None.
 
 =head1 CAVEATS
 
-The module will only touch symbols that match /^\w+$/, i.e. those consisting
-of word characters.
+This module is highly experimental.
+The following two conditions are guaranteed to hold
+at least until leaving the beta stage:
+
+=over
+
+=item * All symbols available before the use line will stay so
+after end of scope
+
+=item * All I<functions> imported I<from other modules> below the use line
+with names consisting of words and not present in L<perlvar>
+are not going to be available after end of scope.
+
+=back
+
+The rest is a big grey zone.
+
+Currently the module works by saving and then restoring globs,
+so variables and filehandles are also reset.
+This may be changed in the future.
 
 Additionally, it skips C<_>, C<a>, C<b>, and all numbers,
 to avoid breaking things.
