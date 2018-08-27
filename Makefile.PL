@@ -15,10 +15,25 @@ WriteMakefile(
         'ExtUtils::MakeMaker' => '0',
     },
     BUILD_REQUIRES => {
-        'Test::More' => '0',
+        'Test::More' => '0.98',
+        'Test::Exception' => '0',
+        'Scalar::Util' => 1,
     },
     PREREQ_PM => {
         'B::Hooks::EndOfScope' => '0',
+    },
+    META_MERGE => {
+        'meta-spec' => { version => 2 },
+        resources   => {
+            bugtracker => {
+                web => 'https://github.com/dallaylaen/namespace-local-perl/issues',
+            },
+            repository => {
+                type => 'git',
+                url => 'https://github.com/dallaylaen/namespace-local-perl.git',
+                web => 'https://github.com/dallaylaen/namespace-local-perl',
+            },
+        },
     },
     dist  => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
     clean => { FILES => 'namespace-local-*' },
