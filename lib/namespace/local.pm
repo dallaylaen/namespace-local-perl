@@ -178,11 +178,20 @@ Konstantin S. Uvarin, C<< <khedin at gmail.com> >>
 
 =head1 BUGS
 
-This is experimental module.
+This is experimental module. There certainly are bugs.
+Suggestions on improvements and/or new features are wanted.
 
-Please report any bugs or feature requests to C<bug-namespace-local at rt.cpan.org>, or through
-the web interface at L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=namespace-local>.  I will be notified, and then you'll
-automatically be notified of progress on your bug as I make changes.
+Feedback welcome at:
+
+=over
+
+=item * L<https://github.com/dallaylaen/namespace-local-perl/issues>
+
+=item * L<http://rt.cpan.org/NoAuth/ReportBug.html?Queue=namespace-local>
+
+=item * C<bug-namespace-local at rt.cpan.org>
+
+=back
 
 =head1 SUPPORT
 
@@ -190,10 +199,13 @@ You can find documentation for this module with the C<perldoc> command.
 
     perldoc namespace::local
 
-
 You can also look for information at:
 
-=over 4
+=over
+
+=item * github:
+
+L<https://github.com/dallaylaen/namespace-local-perl>
 
 =item * RT: CPAN's request tracker (report bugs here)
 
