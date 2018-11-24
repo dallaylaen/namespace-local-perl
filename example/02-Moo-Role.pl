@@ -1,35 +1,46 @@
-#!/usr/bin/env perl
+#!perl
 
-use strict;
-use warnings;
+use 5.010;
+use strictures;
 
 {
-    package My::Role;
+    package Bar;
     use Moo::Role;
 
-    sub public {
+    sub bar {
         return _private(@_);
     };
 
+    # comment this line out to get kaboom
     use namespace::local -below;
     sub _private {
         return 42;
     };
-
-    1;
 };
 
 {
-    package My::Class;
+    package Baz;
+    use Moo::Role;
+
+    sub baz {
+        return _private(@_);
+    };
+
+    # comment this line out to get kaboom
+    use namespace::local -below;
+    sub _private {
+        return 137;
+    };
+};
+
+{
+    package Foo;
     use Moo;
 
-    with 'My::Role';
+    with "Bar", "Baz";
 };
 
-my $x = My::Class->new;
+my $foo = Foo->new;
 
-eval {
-    print $x->public, "\n";
-    print $x->_private, "\n"; # this dies
-};
-warn $@ if $@;
+say $foo->bar;
+say $foo->baz;
