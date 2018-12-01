@@ -169,10 +169,8 @@ sub save_all {
 sub restore_all {
     my $self = shift;
 
-    _erase_syms( $self->{target} );
-    foreach my $name (@{ $self->{names} }) {
-        _restore_glob( $self->{target}, $name, $self->{content}{$name} )
-    };
+    $self->erase_all;
+    $self->restore_globs( @{ $self->{names} } );
 
     return $self;
 };
@@ -206,8 +204,9 @@ sub _get_syms {
 # In: package
 # Out: (none)
 # Side effect: destroys symbol table
-sub _erase_syms {
-    my $package = shift;
+sub erase_all {
+    my $self = shift;
+    my $package = $self->{target};
 
     foreach my $name( _get_syms( $package ) ) {
         no strict 'refs'; ## no critic
@@ -236,15 +235,18 @@ sub _save_glob {
 # In: package, symbol, hash
 # Out: (none)
 # Side effect: recreates *package::symbol
-sub _restore_glob {
-    my ($package, $name, $copy) = @_;
-    # TODO better input validation needed
-    die "ouch" unless ref $copy eq 'HASH';
+sub restore_globs {
+    my ($self, @names) = @_;
 
-    foreach my $type ( @TYPES ) {
-        defined $copy->{$type} or next;
-        no strict 'refs'; ## no critic
-        *{ $package."::".$name } = $copy->{$type}
+    my $package = $self->{target};
+
+    foreach my $name( @names ) {
+        my $copy = $self->{content}{$name};
+        foreach my $type ( @TYPES ) {
+            defined $copy->{$type} or next;
+            no strict 'refs'; ## no critic
+            *{ $package."::".$name } = $copy->{$type}
+        };
     };
 };
 
