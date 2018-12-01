@@ -116,12 +116,18 @@ sub import {
     #     above 'use namespace::local' line
     #     thus preventing subsequent imports from leaking upwards
     # I do not know why it works, it shouldn't.
-    unless ($action eq '-below') {
+    if ($action eq '-around') {
         $control->restore_all;
     };
 
-    on_scope_end {
-        $control->restore_all;
+    if ($action eq '-above' ) {
+        on_scope_end {
+            $control->erase_known;
+        }
+    } else {
+        on_scope_end {
+            $control->restore_all;
+        }
     };
 };
 
@@ -165,10 +171,24 @@ sub save_all {
 sub restore_all {
     my $self = shift;
 
-    $self->erase_all;
+    # Erase _all_ globs, then restore those known to us
+    $self->erase_globs( $self->read_names );
     $self->restore_globs( @{ $self->{names} } );
 
     return $self;
+};
+
+sub erase_unknown {
+    my $self = shift;
+
+    my @unknown = grep { !exists $self->{content}{$_} } $self->read_names;
+    $self->erase_globs( @unknown );
+};
+
+sub erase_known {
+    my $self = shift;
+
+    $self->erase_globs( @{ $self->{names} } );
 };
 
 # in: package name
@@ -204,11 +224,11 @@ sub read_names {
 # In: package
 # Out: (none)
 # Side effect: destroys symbol table
-sub erase_all {
-    my $self = shift;
+sub erase_globs {
+    my ($self, @names) = @_;
     my $package = $self->{target};
 
-    foreach my $name( $self->read_names ) {
+    foreach my $name( @names ) {
         no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
