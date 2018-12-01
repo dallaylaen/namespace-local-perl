@@ -138,6 +138,7 @@ package
 
 use Carp; # too
 
+# TODO use Package::Stash?
 sub new {
     my ($class, %opt) = @_;
 
@@ -172,7 +173,7 @@ sub restore_all {
     my $self = shift;
 
     # Erase _all_ globs, then restore those known to us
-    $self->erase_globs( $self->read_names );
+    $self->erase_unknown;
     $self->restore_globs( @{ $self->{names} } );
 
     return $self;
@@ -184,6 +185,13 @@ sub erase_known {
     $self->erase_globs( @{ $self->{names} } );
 };
 
+sub erase_unknown {
+    my $self = shift;
+
+    my @todo = grep { !exists $self->{content}{$_} } $self->read_names;
+    $self->erase_globs( @todo );
+};
+
 # in: package name
 # out: sorted & filtered list of symbols
 
@@ -192,20 +200,13 @@ sub erase_known {
 #     was preventing on_scope_end from execution
 #     (accedental reference count increase?..)
 
-# Skip some global symbols to avoid breaking unrelated things
-# This list is to grow :'(
-my %let_go;
-foreach my $name(qw(_ a b)) {
-    $let_go{$name}++;
-};
-
 sub read_names {
     my $self = shift;
 
     my $package = $self->{target};
 
     my @list = sort grep {
-        /^\w+$/ and !/^[0-9]+$/ and !$let_go{$_}
+        /^\w+$/ and !/^[0-9]+$/ and $_ ne '_'
     } do {
         no strict 'refs'; ## no critic
         keys %{ $package."::" };
@@ -213,6 +214,17 @@ sub read_names {
 
     return @list;
 };
+
+# Don't touch NAME, PACKAGE, and GLOB itself
+my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
+
+# Skip some well-known variables and functions
+# Format: touch_not{ $name }{ $type }
+my %touch_not;
+$touch_not{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
+$touch_not{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
+$touch_not{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
+$touch_not{$_}{SCALAR}++ for qw( AUTOLOAD a b );
 
 # In: package
 # Out: (none)
@@ -222,13 +234,12 @@ sub erase_globs {
     my $package = $self->{target};
 
     foreach my $name( @names ) {
+        next if $touch_not{$name};
         no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
 };
 
-# Don't touch NAME, PACKAGE, and GLOB itself
-my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
 # In: package, symbol
 # Out: a hash with glob content
@@ -258,6 +269,21 @@ sub restore_globs {
 
     foreach my $name( @names ) {
         my $copy = $self->{content}{$name};
+        if ( my $skip = $touch_not{$name} ) {
+            foreach my $type (keys %$skip) {
+                my $value = do {
+                    no strict 'refs'; ## no critic
+                    *{$package."::".$name}{$type};
+                };
+                $copy->{$type} = $value if defined $value;
+            };
+        };
+
+        {
+            no strict 'refs'; ## no critic
+            delete ${ $package."::" }{$name};
+        };
+
         foreach my $type ( @TYPES ) {
             defined $copy->{$type} or next;
             no strict 'refs'; ## no critic
