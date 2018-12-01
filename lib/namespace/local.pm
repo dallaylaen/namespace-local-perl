@@ -178,13 +178,6 @@ sub restore_all {
     return $self;
 };
 
-sub erase_unknown {
-    my $self = shift;
-
-    my @unknown = grep { !exists $self->{content}{$_} } $self->read_names;
-    $self->erase_globs( @unknown );
-};
-
 sub erase_known {
     my $self = shift;
 
