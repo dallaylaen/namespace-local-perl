@@ -95,12 +95,15 @@ use B::Hooks::EndOfScope 'on_scope_end';
 # 3) upon leaving scope, restore the table again thus erasing
 #    all imports that followed the use of this module
 
+my %known_args;
+$known_args{$_}++ for qw(-above -below -around);
+
 sub import {
     my ($class, $action) = @_;
 
+    $action ||= '-around';
     croak "Unknown argument $action"
-        if defined $action and $action ne '-below';
-    $action ||= '';
+        unless $known_args{$action};
 
     my $caller = caller;
 
