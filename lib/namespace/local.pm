@@ -152,17 +152,13 @@ sub new {
 sub save_all {
     my $self = shift;
 
-    my @names = _get_syms( $self->{target} );
+    my @names = $self->read_names;
 
     # Shallow copy of symbol table does not work for all cases,
     #     or it would've been just '%content = %{ $target."::" }
-    my %content;
-    foreach my $name( @names ) {
-        $content{$name} = _save_glob( $self->{target}, $name );
-    };
+    $self->save_globs( @names );
 
     $self->{names} = \@names;
-    $self->{content} = \%content;
     return $self;
 };
 
@@ -190,13 +186,17 @@ foreach my $name(qw(_ a b)) {
     $let_go{$name}++;
 };
 
-sub _get_syms {
-    my $package = shift;
+sub read_names {
+    my $self = shift;
 
-    no strict 'refs'; ## no critic
+    my $package = $self->{target};
+
     my @list = sort grep {
         /^\w+$/ and !/^[0-9]+$/ and !$let_go{$_}
-    } keys %{ $package."::" };
+    } do {
+        no strict 'refs'; ## no critic
+        keys %{ $package."::" };
+    };
 
     return @list;
 };
@@ -208,7 +208,7 @@ sub erase_all {
     my $self = shift;
     my $package = $self->{target};
 
-    foreach my $name( _get_syms( $package ) ) {
+    foreach my $name( $self->read_names ) {
         no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
@@ -219,17 +219,20 @@ my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
 # In: package, symbol
 # Out: a hash with glob content
-sub _save_glob {
-    my ($package, $name) = @_;
-    my $copy;
+sub save_globs {
+    my ($self, @names) = @_;
 
-    foreach my $type (@TYPES) {
-        no strict 'refs'; ## no critic
-        my $value = *{$package."::".$name}{$type};
-        $copy->{$type} = $value if defined $value;
+    my $package = $self->{target};
+
+    foreach my $name ( @names ) {
+        foreach my $type (@TYPES) {
+            my $value = do {
+                no strict 'refs'; ## no critic
+                *{$package."::".$name}{$type};
+            };
+            $self->{content}{$name}{$type} = $value if defined $value;
+        };
     };
-
-    return $copy;
 };
 
 # In: package, symbol, hash
