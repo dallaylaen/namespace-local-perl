@@ -2,7 +2,7 @@ package namespace::local;
 
 use 5.008;
 use strict;
-use warnings;
+use warnings FATAL => 'all';
 our $VERSION = '0.03';
 
 =head1 NAME
@@ -105,18 +105,10 @@ sub import {
     croak "Unknown argument $action"
         unless $known_args{$action};
 
-    my $caller = caller;
+#    my $control = $class->new( target => scalar caller );
+    my $control = namespace::local::_izer->new( target => scalar caller );
 
-    # FIXME the ($caller, @names, %content) triplet makes me cry,
-    #    should be an object.
-    my @names = _get_syms( $caller );
-
-    # Shallow copy of symbol table does not work for all cases,
-    #     or it would've been just '%content = %{ $caller."::" }
-    my %content;
-    foreach my $name( @names ) {
-        $content{$name} = _save_glob( $caller, $name );
-    };
+    $control->save_all;
 
     # FIXME UGLY HACK
     # Immediate backup-and-restore of symbol table
@@ -125,27 +117,64 @@ sub import {
     #     thus preventing subsequent imports from leaking upwards
     # I do not know why it works, it shouldn't.
     unless ($action eq '-below') {
-        _erase_syms( $caller );
-        foreach my $name (@names) {
-            _restore_glob( $caller, $name, $content{$name} )
-        };
+        $control->restore_all;
     };
 
-    # TODO Somehow adding an `unless $action eq '-above'
-    # doesn't turn this into namespace::clean ...
     on_scope_end {
-        _erase_syms( $caller );
-        foreach my $name (@names) {
-            _restore_glob( $caller, $name, $content{$name} )
-        };
+        $control->restore_all;
     };
 };
 
-# Skip some global symbols to avoid breaking unrelated things
-# This list is to grow :'(
-my %let_go;
-foreach my $name(qw(_ a b)) {
-    $let_go{$name}++;
+# Hide internal OO engine
+# Maybe it will be released later...
+package
+    namespace::local::_izer;
+
+use Carp; # too
+
+sub new {
+    my ($class, %opt) = @_;
+
+    # TODO validate options better
+    # Assume caller?
+    croak "target package not specified"
+        unless defined $opt{target};
+
+    return bless {
+        target  => $opt{target},
+        names   => [],
+        content => {},
+    }, $class;
+
+    # TODO read names here?
+};
+
+sub save_all {
+    my $self = shift;
+
+    my @names = _get_syms( $self->{target} );
+
+    # Shallow copy of symbol table does not work for all cases,
+    #     or it would've been just '%content = %{ $target."::" }
+    my %content;
+    foreach my $name( @names ) {
+        $content{$name} = _save_glob( $self->{target}, $name );
+    };
+
+    $self->{names} = \@names;
+    $self->{content} = \%content;
+    return $self;
+};
+
+sub restore_all {
+    my $self = shift;
+
+    _erase_syms( $self->{target} );
+    foreach my $name (@{ $self->{names} }) {
+        _restore_glob( $self->{target}, $name, $self->{content}{$name} )
+    };
+
+    return $self;
 };
 
 # in: package name
@@ -155,6 +184,14 @@ foreach my $name(qw(_ a b)) {
 # We really need to filter because copying ALL table
 #     was preventing on_scope_end from execution
 #     (accedental reference count increase?..)
+
+# Skip some global symbols to avoid breaking unrelated things
+# This list is to grow :'(
+my %let_go;
+foreach my $name(qw(_ a b)) {
+    $let_go{$name}++;
+};
+
 sub _get_syms {
     my $package = shift;
 
@@ -162,6 +199,7 @@ sub _get_syms {
     my @list = sort grep {
         /^\w+$/ and !/^[0-9]+$/ and !$let_go{$_}
     } keys %{ $package."::" };
+
     return @list;
 };
 
