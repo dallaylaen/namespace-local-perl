@@ -11,45 +11,89 @@ namespace::local - Confine imports to the current scope
 
 =head1 SYNOPSIS
 
-This module allows to use imports inside a block or sub without polluting
-the whole package:
+This module allows to confine imports or private functions
+to a given scope. The following modes of operation exist:
+
+=head2 -around (the default)
+
+This confines all subsequent imports and functions
+between the use of L<namespace::local> and the end of scope.
 
     package My::Package;
+
+    sub normal_sub {
+        # frobnicate() is unknown
+    }
 
     sub using_import {
         use namespace::local;
-        use Foo::Bar qw(quux);
-        # quux() is available here
+        use Some::Crazy::DSL qw(frobnicate);
+        frobnicate Foo => 42;
     }
 
     sub no_import {
-        # quux() is unknown
+        # frobnicate() is unknown
     }
 
-Another use case is confining private functions:
+=head2 -below
+
+Hides subsequent imports and functions on end of scope.
+
+This may be used to mask private functions:
 
     package My::Package;
+    use Moo::Role;
 
+    # This is available everywhere
     sub public {
-        return _private();
+        return private();
     };
 
     use namespace::local -below;
-    sub _private {
+
+    # This is only available in the current file
+    sub private {
         return 42;
     };
 
-    # now elsewhere
-    use My::Package;
-    My::Package->public; # 42
-    My::Package->_private; # dies! no such function/method
-
-Note that this doesn't work for private methods since methods
+Note that this doesn't work for private I<methods> since methods
 are resolved at runtime.
 
-Unlike L<namespace::clean> by which it is clearly inspired,
-it is useless at the top or your module as it will erase all
-functions defined below its use line.
+=head2 -above
+
+Hide all functions and exports above the use line.
+
+This emulates L<namespace::clean>, by which this module is clearly inspired.
+
+    package My::Module;
+    use POSIX;
+    use Time::HiRes;
+    use Carp;
+    use namespace::local -above;
+
+    # now define public functions here
+
+=head1 EXEMPTIONS
+
+The following symbols are not touched by this module, to avoid breaking things:
+
+=over
+
+=item * anything that does not consist of word characters;
+
+=item * $_, @_, $1, $2, ...;
+
+=item * Arrays: C<@CARP_NOT>, C<@EXPORT>, C<@EXPORT_OK>, C<@ISA>;
+
+=item * Scalars: C<$AUTOLOAD>, C<$a>, C<$b>;
+
+=item * Files: C<DATA>, C<STDERR>, C<STDIN>, C<STDOUT>;
+
+=item * Functions: C<AUTOLOAD>, C<DESTROY>, C<import>;
+
+=back
+
+This list is likely incomplete, and may grow in the future.
 
 =head1 METHOD/FUNCTIONS
 
@@ -77,10 +121,6 @@ The rest is a big grey zone.
 Currently the module works by saving and then restoring globs,
 so variables and filehandles are also reset.
 This may be changed in the future.
-
-Additionally, it skips C<_>, C<a>, C<b>, and all numbers,
-to avoid breaking things.
-More exceptions MAY be added in the future (e.g. C<ARGV>).
 
 =cut
 
@@ -220,6 +260,7 @@ my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
 # Skip some well-known variables and functions
 # Format: touch_not{ $name }{ $type }
+# NOTE if you change the list, also change the EXEMPTIONS section in the POD.
 my %touch_not;
 $touch_not{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
 $touch_not{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
@@ -299,9 +340,8 @@ Konstantin S. Uvarin, C<< <khedin at gmail.com> >>
 =head1 BUGS
 
 This is experimental module. There certainly are bugs.
-Suggestions on improvements and/or new features are wanted.
 
-Feedback welcome at:
+Bug reports, feature requests, suggestions and general feedback welcome at:
 
 =over
 
@@ -345,10 +385,11 @@ L<http://search.cpan.org/dist/namespace-local/>
 
 =back
 
-
 =head1 SEE ALSO
 
-L<namespace::clean>
+L<namespace::clean>, L<namespace::sweep>, L<namespace::autoclean>...
+
+L<B::Hooks::EndOfScope> is used as a backend.
 
 =head1 LICENSE AND COPYRIGHT
 
