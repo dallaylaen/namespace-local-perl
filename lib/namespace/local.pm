@@ -3,11 +3,11 @@ package namespace::local;
 use 5.008;
 use strict;
 use warnings FATAL => 'all';
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 =head1 NAME
 
-namespace::local - Confine imports to the current scope
+namespace::local - Confine imports or functions to a given scope
 
 =head1 SYNOPSIS
 

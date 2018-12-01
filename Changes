@@ -1,5 +1,9 @@
 Revision history for namespace-local
 
+0.04    Sun Dec 2 2018
+        - Add -above switch that works like namespace::clean
+        - Exempt more symbols from being fiddled with
+
 0.03    Fri Nov 23 2018
         - Add -below switch
 
