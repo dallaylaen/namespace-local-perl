@@ -139,27 +139,33 @@ use Carp;
 use B::Hooks::EndOfScope 'on_scope_end';
 use Scalar::Util qw( weaken );
 
-my %known_args;
-$known_args{$_}++ for qw(-above -below -around);
+my %known_action;
+$known_action{$_}++ for qw(-above -below -around);
 
 my $last_command;
 
 sub import {
-    my ($class, $action) = @_;
+    my $class = shift;
 
-    # TODO more options (-except, -only, -target etc)
-    $action ||= '-around';
-    croak "Unknown argument $action"
-        unless $known_args{$action};
+    my $target = caller;
+    my %opt = ( action => '-around' );
+    while (@_) {
+        my $arg = shift;
+        if ( $known_action{$arg} ) {
+            $opt{action} = $arg;
+        } else {
+            croak "$class: unknown option $arg";
+        };
+    };
 
     # multiple callback may interfere, so accumulate
     # ALL events at current scope end and make them play along well
-    my $command = namespace::local::_command->new( target => scalar caller );
+    my $command = namespace::local::_command->new( target => $target );
     $last_command->set_next( $command ) if $last_command;
     $last_command = $command;
     weaken $last_command; # to avoid leaks
 
-    $command->prepare( action => $action );
+    $command->prepare( %opt );
 
     on_scope_end {
         $command->execute;
