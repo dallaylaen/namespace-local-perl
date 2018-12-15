@@ -194,7 +194,7 @@ sub prepare {
 
     my $control = namespace::local::_izer->new( target => $target );
 
-    $control->save_all;
+    my $table = $control->read_symbols;
 
     # FIXME UGLY HACK
     # Immediate backup-and-restore of symbol table
@@ -203,25 +203,26 @@ sub prepare {
     #     thus preventing subsequent imports from leaking upwards
     # I do not know why it works, it shouldn't.
     if ($action eq '-around') {
-        $control->restore_all;
+        $control->erase_symbols;
+        $control->write_symbols( $table );
     };
 
     if ($action eq '-above' ) {
         $self->{action} = sub {
-            $control->erase_known;
+            $control->erase_only_symbols( $table );
         };
     } else {
         $self->{action} = sub {
-            $control->restore_all;
+            $control->erase_symbols;
+            $control->write_symbols( $table );
         };
     };
 };
 
-# dumb execution, for now
 sub execute {
     my ($self) = @_;
 
-    # always execute stacked command in reverse order
+    # always execute stacked commands in reverse order
     $self->{next}->execute
         if $self->{next};
 
@@ -233,7 +234,7 @@ package
     namespace::local::_izer;
 
 use Carp; # too
-our @CARP_NOT = qw(namespace::local);
+our @CARP_NOT = qw(namespace::local namespace::local::_command);
 
 # TODO use Package::Stash?
 sub new {
@@ -246,47 +247,7 @@ sub new {
 
     return bless {
         target  => $opt{target},
-        names   => [],
-        content => {},
     }, $class;
-
-    # TODO read names here?
-};
-
-sub save_all {
-    my $self = shift;
-
-    my @names = $self->read_names;
-
-    # Shallow copy of symbol table does not work for all cases,
-    #     or it would've been just '%content = %{ $target."::" }
-    $self->save_globs( @names );
-
-    $self->{names} = \@names;
-    return $self;
-};
-
-sub restore_all {
-    my $self = shift;
-
-    # Erase _all_ globs, then restore those known to us
-    $self->erase_unknown;
-    $self->restore_globs( @{ $self->{names} } );
-
-    return $self;
-};
-
-sub erase_known {
-    my $self = shift;
-
-    $self->erase_globs( @{ $self->{names} } );
-};
-
-sub erase_unknown {
-    my $self = shift;
-
-    my @todo = grep { !exists $self->{content}{$_} } $self->read_names;
-    $self->erase_globs( @todo );
 };
 
 # in: package name
@@ -327,46 +288,69 @@ $touch_not{$_}{SCALAR}++ for qw( AUTOLOAD a b );
 # In: package
 # Out: (none)
 # Side effect: destroys symbol table
-sub erase_globs {
-    my ($self, @names) = @_;
-    my $package = $self->{target};
+sub erase_symbols {
+    my ($self, $list) = @_;
 
-    foreach my $name( @names ) {
+    my $package = $self->{target};
+    $list ||= [ $self->read_names ];
+
+    foreach my $name( @$list ) {
         next if $touch_not{$name};
         no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
 };
 
+sub erase_only_symbols {
+    my ($self, $table) = @_;
+
+    my $package = $self->{target};
+    my @list = keys %$table;
+
+    # read all necessary symbols
+    my $current = $self->read_symbols( \@list );
+
+    foreach my $name ( @list ) {
+        $table->{$name}{$_} and delete $current->{$name}{$_}
+            for @TYPES;
+    };
+
+    $self->erase_symbols( \@list );
+    $self->write_symbols( $current );
+};
 
 # In: package, symbol
 # Out: a hash with glob content
-sub save_globs {
-    my ($self, @names) = @_;
+sub read_symbols {
+    my ($self, $list) = @_;
 
     my $package = $self->{target};
+    $list ||= [ $self->read_names ];
 
-    foreach my $name ( @names ) {
+    my %content;
+    foreach my $name ( @$list ) {
         foreach my $type (@TYPES) {
             my $value = do {
                 no strict 'refs'; ## no critic
                 *{$package."::".$name}{$type};
             };
-            $self->{content}{$name}{$type} = $value if defined $value;
+            $content{$name}{$type} = $value if defined $value;
         };
     };
+
+    return \%content;
 };
 
 # In: package, symbol, hash
 # Out: (none)
 # Side effect: recreates *package::symbol
-sub restore_globs {
-    my ($self, @names) = @_;
+sub write_symbols {
+    my ($self, $table) = @_;
 
     my $package = $self->{target};
 
-    foreach my $name( @names ) {
-        my $copy = $self->{content}{$name};
+    foreach my $name( keys %$table ) {
+        my $copy = $table->{$name};
         if ( my $skip = $touch_not{$name} ) {
             foreach my $type (keys %$skip) {
                 my $value = do {
