@@ -130,6 +130,7 @@ use Carp;
 
 # this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
+use Scalar::Util qw( weaken );
 
 my %known_args;
 $known_args{$_}++ for qw(-above -below -around);
@@ -149,7 +150,7 @@ sub import {
     my $command = namespace::local::_command->new;
     $last_command->set_next( $command ) if $last_command;
     $last_command = $command;
-    # TODO weaken $last_command; # to avoid leaks
+    weaken $last_command; # to avoid leaks
 
     $command->prepare( action => $action, target => scalar caller );
 

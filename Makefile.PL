@@ -17,10 +17,10 @@ WriteMakefile(
     BUILD_REQUIRES => {
         'Test::More' => '0.98',
         'Test::Exception' => '0',
-        'Scalar::Util' => 1,
     },
     PREREQ_PM => {
         'B::Hooks::EndOfScope' => '0',
+        'Scalar::Util' => 1,
     },
     META_MERGE => {
         'meta-spec' => { version => 2 },
