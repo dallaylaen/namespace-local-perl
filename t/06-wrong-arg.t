@@ -9,6 +9,14 @@ require namespace::local; # not use
 
 throws_ok {
     namespace::local->import( "-foobar" );
-} qr/[Uu]nknown.*-foobar/, "descriptive error";
+} qr/^namespace::local:.*nknown.*-foobar/, "descriptive error";
+
+throws_ok {
+    namespace::local->import( -except => {} );
+} qr/^namespace::local:.* -except .* must be/, "descriptive error (-except)";
+
+throws_ok {
+    namespace::local->import( -except => [ '~www' ] );
+} qr/^namespace::local: cannot exempt.*~www\b/, "descriptive error (-except, bad symbol)";
 
 done_testing;
