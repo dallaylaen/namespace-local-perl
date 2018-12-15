@@ -155,47 +155,23 @@ my $last_command;
 sub import {
     my $class = shift;
 
-    my $opt = $class->_process_options( @_ );
+    my $command = namespace::local::_command->new( target => scalar caller );
+    $command->parse_options( @_ );
 
     # on_scope_end callback execution order is direct
     # we need reversed order, so use a stack of commands.
-    my $command = namespace::local::_command->new(
-        target => delete $opt->{target} || scalar caller );
     $last_command->set_next( $command ) if $last_command;
     $last_command = $command;
     weaken $last_command; # to avoid leaks
 
-    $command->prepare( %$opt );
+    $command->prepare;
 
     on_scope_end {
         $command->execute;
     };
 };
 
-sub _process_options {
-    my $class = shift;
-
-    my %opt = ( action => '-around' );
-    while (@_) {
-        my $arg = shift;
-        if ( $known_action{$arg} ) {
-            $opt{action} = $arg;
-        } elsif ($arg eq '-target') {
-            $opt{target} = shift;
-        } elsif ($arg eq '-except') {
-            my $cond = shift;
-            if (ref $cond eq 'Regexp') {
-                $opt{except_rex} = $cond;
-            } else {
-                croak "$class: -except argument must be regexp or array"
-            };
-        } else {
-            croak "$class: unknown option $arg";
-        };
-    };
-
-    return \%opt;
-};
+;
 
 # Hide internal OO engine
 # Maybe it will be released later...
@@ -212,28 +188,44 @@ sub new {
 
     # TODO check options
     $opt{except_rex} = qr/^[0-9]+$|^-$/; # no matter what, exempt $_, $1, ...
+    $opt{action} = '-around';
 
     return bless \%opt, $class;
 };
 
 sub set_next {
     my ($self, $next) = @_;
-    carp "Next already set"
-        if $self->{next};
     $self->{next} = $next;
 };
 
-# maybe merge with new?
-# don't want a big constructor
-sub prepare {
-    my ($self, %opt) = @_;
+# this changes nothing except the object itself
+sub parse_options {
+    my $self = shift;
 
-    my $action = $opt{action};
-
-    if (my $rex = $opt{except_rex}) {
-        my $old = $self->{except_rex};
-        $self->{except_rex} = qr((?:$old)|(?:$rex));
+    while (@_) {
+        my $arg = shift;
+        if ( $known_action{$arg} ) {
+            $self->{action} = $arg;
+        } elsif ($arg eq '-target') {
+            $self->{target} = shift;
+        } elsif ($arg eq '-except') {
+            my $cond = shift;
+            if (ref $cond eq 'Regexp') {
+                $self->{except_rex} = qr((?:$self->{except_rex})|(?:$cond));
+            } else {
+                croak "namespace::local: -except argument must be regexp or array"
+            };
+        } else {
+            croak "namespace::local: unknown option $arg";
+        };
     };
+};
+
+# side effects + setup self->execute
+sub prepare {
+    my $self = shift;
+
+    my $action = $self->{action};
 
     my $table = $self->read_symbols;
 
@@ -249,11 +241,11 @@ sub prepare {
     };
 
     if ($action eq '-above' ) {
-        $self->{action} = sub {
+        $self->{todo} = sub {
             $self->erase_only_symbols( $table );
         };
     } else {
-        $self->{action} = sub {
+        $self->{todo} = sub {
             $self->erase_symbols;
             $self->write_symbols( $table );
         };
@@ -267,7 +259,7 @@ sub execute {
     $self->{next}->execute
         if $self->{next};
 
-    $self->{action}->()
+    $self->{todo}->()
         unless $self->{done}++;
 };
 
