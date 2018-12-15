@@ -1,4 +1,3 @@
-
 use 5.008;
 use strict;
 use warnings FATAL => 'all';
@@ -163,9 +162,6 @@ use Carp;
 use B::Hooks::EndOfScope 'on_scope_end';
 use Scalar::Util qw( weaken );
 
-my %known_action;
-$known_action{$_}++ for qw(-above -below -around);
-
 my $last_command;
 
 sub import {
@@ -221,6 +217,9 @@ sub set_next {
     my ($self, $next) = @_;
     $self->{next} = $next;
 };
+
+my %known_action;
+$known_action{$_}++ for qw(-above -below -around);
 
 # this changes nothing except the object itself
 sub parse_options {
@@ -398,6 +397,9 @@ sub write_symbols {
 
     my $package = $self->{target};
 
+    # TODO lumping touch_not and $table together is a workaround
+    #     for erase_symbols skipping over touch_not altogether.
+    # It does not belong here, and should be fixed at some point.
     my %uniq;
     $uniq{$_}++ for keys %$table, keys %{ $self->{touch_not} };
 
