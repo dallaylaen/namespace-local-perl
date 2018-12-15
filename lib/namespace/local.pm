@@ -75,6 +75,14 @@ This emulates L<namespace::clean>, by which this module is clearly inspired.
 
     # now define public functions here
 
+=head1 OPTIONS
+
+Extra options may be passed to namespace::local:
+
+=head2 -except <regex>
+
+Exempt names matching the regular expression from namespace modification.
+
 =head1 EXEMPTIONS
 
 The following symbols are not touched by this module, to avoid breaking things:
@@ -147,29 +155,46 @@ my $last_command;
 sub import {
     my $class = shift;
 
-    my $target = caller;
+    my $opt = $class->_process_options( @_ );
+
+    # on_scope_end callback execution order is direct
+    # we need reversed order, so use a stack of commands.
+    my $command = namespace::local::_command->new(
+        target => delete $opt->{target} || scalar caller );
+    $last_command->set_next( $command ) if $last_command;
+    $last_command = $command;
+    weaken $last_command; # to avoid leaks
+
+    $command->prepare( %$opt );
+
+    on_scope_end {
+        $command->execute;
+    };
+};
+
+sub _process_options {
+    my $class = shift;
+
     my %opt = ( action => '-around' );
     while (@_) {
         my $arg = shift;
         if ( $known_action{$arg} ) {
             $opt{action} = $arg;
+        } elsif ($arg eq '-target') {
+            $opt{target} = shift;
+        } elsif ($arg eq '-except') {
+            my $cond = shift;
+            if (ref $cond eq 'Regexp') {
+                $opt{except_rex} = $cond;
+            } else {
+                croak "$class: -except argument must be regexp or array"
+            };
         } else {
             croak "$class: unknown option $arg";
         };
     };
 
-    # multiple callback may interfere, so accumulate
-    # ALL events at current scope end and make them play along well
-    my $command = namespace::local::_command->new( target => $target );
-    $last_command->set_next( $command ) if $last_command;
-    $last_command = $command;
-    weaken $last_command; # to avoid leaks
-
-    $command->prepare( %opt );
-
-    on_scope_end {
-        $command->execute;
-    };
+    return \%opt;
 };
 
 # Hide internal OO engine
@@ -184,7 +209,10 @@ our @CARP_NOT = qw(namespace::local);
 # target => package_name is required
 sub new {
     my ($class, %opt) = @_;
+
     # TODO check options
+    $opt{except_rex} = qr/^[0-9]+$|^-$/; # no matter what, exempt $_, $1, ...
+
     return bless \%opt, $class;
 };
 
@@ -195,10 +223,17 @@ sub set_next {
     $self->{next} = $next;
 };
 
+# maybe merge with new?
+# don't want a big constructor
 sub prepare {
     my ($self, %opt) = @_;
 
     my $action = $opt{action};
+
+    if (my $rex = $opt{except_rex}) {
+        my $old = $self->{except_rex};
+        $self->{except_rex} = qr((?:$old)|(?:$rex));
+    };
 
     my $table = $self->read_symbols;
 
@@ -248,9 +283,10 @@ sub read_names {
     my $self = shift;
 
     my $package = $self->{target};
+    my $except = $self->{except_rex};
 
     my @list = sort grep {
-        /^\w+$/ and !/^[0-9]+$/ and $_ ne '_'
+        /^\w+$/ and $_ !~ $except
     } do {
         no strict 'refs'; ## no critic
         keys %{ $package."::" };
