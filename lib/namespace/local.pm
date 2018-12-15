@@ -1,8 +1,10 @@
-package namespace::local;
 
 use 5.008;
 use strict;
 use warnings FATAL => 'all';
+
+package namespace::local;
+
 our $VERSION = '0.0402';
 
 =head1 NAME
@@ -129,24 +131,60 @@ use Carp;
 # this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
 
-# how it works:
-# 1) upon use, create a copy of caller's symbol table
-# 2) upon use, restore the symbol table from backup (see comments below)
-# 3) upon leaving scope, restore the table again thus erasing
-#    all imports that followed the use of this module
-
 my %known_args;
 $known_args{$_}++ for qw(-above -below -around);
+
+my $last_command;
 
 sub import {
     my ($class, $action) = @_;
 
+    # TODO more options (-except, -only, -target etc)
     $action ||= '-around';
     croak "Unknown argument $action"
         unless $known_args{$action};
 
-#    my $control = $class->new( target => scalar caller );
-    my $control = namespace::local::_izer->new( target => scalar caller );
+    # multiple callback may interfere, so accumulate
+    # ALL events at current scope end and make them play along well
+    my $command = namespace::local::_command->new;
+    $last_command->set_next( $command ) if $last_command;
+    $last_command = $command;
+    # TODO weaken $last_command; # to avoid leaks
+
+    $command->prepare( action => $action, target => scalar caller );
+
+    on_scope_end {
+        $command->execute;
+    };
+};
+
+# Hide internal OO engine
+# Maybe it will be released later...
+
+package
+    namespace::local::_command;
+
+use Carp; # too
+our @CARP_NOT = qw(namespace::local);
+
+sub new {
+    return bless { }, shift;
+};
+
+sub set_next {
+    my ($self, $next) = @_;
+    carp "Next already set"
+        if $self->{next};
+    $self->{next} = $next;
+};
+
+sub prepare {
+    my ($self, %opt) = @_;
+
+    my $target = $opt{target};
+    my $action = $opt{action};
+
+    my $control = namespace::local::_izer->new( target => $target );
 
     $control->save_all;
 
@@ -161,22 +199,33 @@ sub import {
     };
 
     if ($action eq '-above' ) {
-        on_scope_end {
+        $self->{action} = sub {
             $control->erase_known;
-        }
+        };
     } else {
-        on_scope_end {
+        $self->{action} = sub {
             $control->restore_all;
-        }
+        };
     };
 };
 
-# Hide internal OO engine
-# Maybe it will be released later...
+# dumb execution, for now
+sub execute {
+    my ($self) = @_;
+
+    # always execute stacked command in reverse order
+    $self->{next}->execute
+        if $self->{next};
+
+    $self->{action}->()
+        unless $self->{done}++;
+};
+
 package
     namespace::local::_izer;
 
 use Carp; # too
+our @CARP_NOT = qw(namespace::local);
 
 # TODO use Package::Stash?
 sub new {
