@@ -1,5 +1,8 @@
 Revision history for namespace-local
 
+0.05    Sat Dec 15 2018
+        - Fix interference between -above and -below (bug #1)
+
 0.0402  Fri Dec 7 2018
         - Split out integration tests to separate `it` directory
 

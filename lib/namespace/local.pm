@@ -5,7 +5,7 @@ use warnings FATAL => 'all';
 
 package namespace::local;
 
-our $VERSION = '0.0402';
+our $VERSION = '0.05';
 
 =head1 NAME
 
@@ -123,6 +123,13 @@ The rest is a big grey zone.
 Currently the module works by saving and then restoring globs,
 so variables and filehandles are also reset.
 This may be changed in the future.
+
+Due to order of callback execution in L<B::Hooks::EndOfScope>,
+other modules in C<namespace::> namespace may interact poorly
+with L<namespace::local>.
+
+However, at least C<-above> and C<-below> switches
+work as expected if used simultaneously.
 
 =cut
 
