@@ -1,5 +1,9 @@
 Revision history for namespace-local
 
+0.06    Sat Dec 15 2018
+        - Add -except and -target options
+        - Refactor internals
+
 0.05    Sat Dec 15 2018
         - Fix interference between -above and -below (bug #1)
 
