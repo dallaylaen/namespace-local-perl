@@ -79,9 +79,18 @@ This emulates L<namespace::clean>, by which this module is clearly inspired.
 
 Extra options may be passed to namespace::local:
 
-=head2 -except <regex>
+=head2 -except => <regex>
 
-Exempt names matching the regular expression from namespace modification.
+Exempt symbols with names matching the regular expression
+from the module's action.
+
+=head2 -except => \@list
+
+Exempt symbols mentioned in list (with sigils)
+from the module's action.
+
+No sigil means a function.
+Only names made of word characters are supported.
 
 =head1 EXEMPTIONS
 
@@ -190,6 +199,14 @@ sub new {
     $opt{except_rex} = qr/^[0-9]+$|^-$/; # no matter what, exempt $_, $1, ...
     $opt{action} = '-around';
 
+    # Skip some well-known variables and functions
+    # Format: touch_not{ $name }{ $type }
+    # NOTE if you change the list, also change the EXEMPTIONS section in the POD.
+    $opt{touch_not}{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
+    $opt{touch_not}{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
+    $opt{touch_not}{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
+    $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD a b );
+
     return bless \%opt, $class;
 };
 
@@ -212,12 +229,32 @@ sub parse_options {
             my $cond = shift;
             if (ref $cond eq 'Regexp') {
                 $self->{except_rex} = qr((?:$self->{except_rex})|(?:$cond));
+            } elsif (ref $cond eq 'ARRAY') {
+                $self->touch_not( @$cond );
             } else {
-                croak "namespace::local: -except argument must be regexp or array"
+                _croak( "namespace::local: -except argument must be regexp or array" )
             };
         } else {
-            croak "namespace::local: unknown option $arg";
+            _croak( "namespace::local: unknown option $arg" );
         };
+    };
+};
+
+# TODO join with @TYPE array from below
+my %sigil = (
+    ''  => 'CODE',
+    '$' => 'SCALAR',
+    '%' => 'HASH',
+    '@' => 'ARRAY',
+);
+
+sub touch_not {
+    my ($self, @list) = @_;
+
+    foreach (@list) {
+        /^([\$\@\%]?)(\w+)$/
+            or _croak( "cannot exempt sybmol $_: unsupported format" );
+        $self->{touch_not}{$2}{ $sigil{$1} }++
     };
 };
 
@@ -290,15 +327,6 @@ sub read_names {
 # Don't touch NAME, PACKAGE, and GLOB itself
 my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
-# Skip some well-known variables and functions
-# Format: touch_not{ $name }{ $type }
-# NOTE if you change the list, also change the EXEMPTIONS section in the POD.
-my %touch_not;
-$touch_not{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
-$touch_not{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
-$touch_not{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
-$touch_not{$_}{SCALAR}++ for qw( AUTOLOAD a b );
-
 # In: package
 # Out: (none)
 # Side effect: destroys symbol table
@@ -309,7 +337,7 @@ sub erase_symbols {
     $list ||= [ $self->read_names ];
 
     foreach my $name( @$list ) {
-        next if $touch_not{$name};
+        next if $self->{touch_not}{$name};
         no strict 'refs'; ## no critic
         delete ${ $package."::" }{$name};
     };
@@ -363,9 +391,12 @@ sub write_symbols {
 
     my $package = $self->{target};
 
-    foreach my $name( keys %$table ) {
-        my $copy = $table->{$name};
-        if ( my $skip = $touch_not{$name} ) {
+    my %uniq;
+    $uniq{$_}++ for keys %$table, keys %{ $self->{touch_not} };
+
+    foreach my $name( keys %uniq ) {
+        my $copy = $table->{$name} || {};
+        if ( my $skip = $self->{touch_not}{$name} ) {
             foreach my $type (keys %$skip) {
                 my $value = do {
                     no strict 'refs'; ## no critic
@@ -386,6 +417,10 @@ sub write_symbols {
             *{ $package."::".$name } = $copy->{$type}
         };
     };
+};
+
+sub _croak {
+    croak ("namespace::local: ".shift);
 };
 
 =head1 AUTHOR
