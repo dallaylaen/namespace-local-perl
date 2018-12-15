@@ -154,12 +154,12 @@ sub import {
 
     # multiple callback may interfere, so accumulate
     # ALL events at current scope end and make them play along well
-    my $command = namespace::local::_command->new;
+    my $command = namespace::local::_command->new( target => scalar caller );
     $last_command->set_next( $command ) if $last_command;
     $last_command = $command;
     weaken $last_command; # to avoid leaks
 
-    $command->prepare( action => $action, target => scalar caller );
+    $command->prepare( action => $action );
 
     on_scope_end {
         $command->execute;
@@ -175,8 +175,11 @@ package
 use Carp; # too
 our @CARP_NOT = qw(namespace::local);
 
+# target => package_name is required
 sub new {
-    return bless { }, shift;
+    my ($class, %opt) = @_;
+    # TODO check options
+    return bless \%opt, $class;
 };
 
 sub set_next {
@@ -189,12 +192,9 @@ sub set_next {
 sub prepare {
     my ($self, %opt) = @_;
 
-    my $target = $opt{target};
     my $action = $opt{action};
 
-    my $control = namespace::local::_izer->new( target => $target );
-
-    my $table = $control->read_symbols;
+    my $table = $self->read_symbols;
 
     # FIXME UGLY HACK
     # Immediate backup-and-restore of symbol table
@@ -203,18 +203,18 @@ sub prepare {
     #     thus preventing subsequent imports from leaking upwards
     # I do not know why it works, it shouldn't.
     if ($action eq '-around') {
-        $control->erase_symbols;
-        $control->write_symbols( $table );
+        $self->erase_symbols;
+        $self->write_symbols( $table );
     };
 
     if ($action eq '-above' ) {
         $self->{action} = sub {
-            $control->erase_only_symbols( $table );
+            $self->erase_only_symbols( $table );
         };
     } else {
         $self->{action} = sub {
-            $control->erase_symbols;
-            $control->write_symbols( $table );
+            $self->erase_symbols;
+            $self->write_symbols( $table );
         };
     };
 };
@@ -228,26 +228,6 @@ sub execute {
 
     $self->{action}->()
         unless $self->{done}++;
-};
-
-package
-    namespace::local::_izer;
-
-use Carp; # too
-our @CARP_NOT = qw(namespace::local namespace::local::_command);
-
-# TODO use Package::Stash?
-sub new {
-    my ($class, %opt) = @_;
-
-    # TODO validate options better
-    # Assume caller?
-    croak "target package not specified"
-        unless defined $opt{target};
-
-    return bless {
-        target  => $opt{target},
-    }, $class;
 };
 
 # in: package name
