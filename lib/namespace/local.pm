@@ -239,10 +239,10 @@ sub parse_options {
             } elsif (ref $cond eq 'ARRAY') {
                 $self->touch_not( @$cond );
             } else {
-                _croak( "namespace::local: -except argument must be regexp or array" )
+                _croak( "-except argument must be regexp or array" )
             };
         } else {
-            _croak( "namespace::local: unknown option $arg" );
+            _croak( "unknown option $arg" );
         };
     };
 };
