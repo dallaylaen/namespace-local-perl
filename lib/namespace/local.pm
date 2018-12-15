@@ -4,7 +4,7 @@ use warnings FATAL => 'all';
 
 package namespace::local;
 
-our $VERSION = '0.0601';
+our $VERSION = '0.0603';
 
 =head1 NAME
 
@@ -422,8 +422,17 @@ sub write_symbols {
 
         foreach my $type ( @TYPES ) {
             defined $copy->{$type} or next;
-            no strict 'refs'; ## no critic
-            *{ $package."::".$name } = $copy->{$type}
+            eval {
+                # FIXME on perls 5.014..5.022 this block fails
+                # because @ISA is readonly.
+                # So we wrap it in eval with no catch
+                # until a better solution is done
+                no strict 'refs'; ## no critic
+                *{ $package."::".$name } = $copy->{$type}
+            } || do {
+                Carp::cluck "namespace::local: working around error: $@"
+                    unless $@ =~ /^Modification of a read-only/;
+            };
         };
     };
 };
