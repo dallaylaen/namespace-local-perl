@@ -79,10 +79,10 @@ This emulates L<namespace::clean>, by which this module is clearly inspired.
 
 Extra options may be passed to namespace::local:
 
-=head2 -except => <regex>
+=head2 -target => Package::Name
 
-Exempt symbols with names matching the regular expression
-from the module's action.
+Act on another package instead of the caller.
+Note that L<namespace::local> is only meant to be used in BEGIN phase.
 
 =head2 -except => \@list
 
@@ -91,6 +91,13 @@ from the module's action.
 
 No sigil means a function.
 Only names made of word characters are supported.
+
+=head2 -except => <regex>
+
+Exempt symbols with names matching the regular expression
+from the module's action.
+
+Note that sigils are ignored here.
 
 =head1 EXEMPTIONS
 
