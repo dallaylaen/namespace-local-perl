@@ -156,34 +156,29 @@ work as expected if used simultaneously.
 
 =cut
 
-use Carp;
-
 # this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
-use Scalar::Util qw( weaken );
 
-my $last_command;
+my @stack;
 
 sub import {
     my $class = shift;
 
-    my $command = namespace::local::_command->new( target => scalar caller );
+    my $command = namespace::local::_command->new( caller => [ caller ] );
     $command->parse_options( @_ );
 
     # on_scope_end callback execution order is direct
     # we need reversed order, so use a stack of commands.
-    $last_command->set_next( $command ) if $last_command;
-    $last_command = $command;
-    weaken $last_command; # to avoid leaks
+    $stack[-1]->set_next( $command ) if @stack;
+    push @stack, $command;
 
     $command->prepare;
 
     on_scope_end {
+        pop @stack;
         $command->execute;
     };
 };
-
-;
 
 # Hide internal OO engine
 # Maybe it will be released later...
@@ -199,8 +194,10 @@ sub new {
     my ($class, %opt) = @_;
 
     # TODO check options
-    $opt{except_rex} = qr/^[0-9]+$|^-$/; # no matter what, exempt $_, $1, ...
+    $opt{except_rex} = qr/^[0-9]+$|^_$/; # no matter what, exempt $_, $1, ...
     $opt{action} = '-around';
+    $opt{target} = $opt{caller}[0];
+    $opt{origin} = join ":", @{$opt{caller}}[1,2];
 
     # Skip some well-known variables and functions
     # Format: touch_not{ $name }{ $type }
@@ -215,7 +212,17 @@ sub new {
 
 sub set_next {
     my ($self, $next) = @_;
+
+    carp "probably a bug in namespace::local - uncommitted command replaced in chain"
+        if $self->{next} and !$self->{next}{done};
+
     $self->{next} = $next;
+};
+
+sub DESTROY {
+    my $self = shift;
+    carp "probably a bug in namespace::local: callback set but not executed"
+        if $self->{todo} and !$self->{done};
 };
 
 my %known_action;
