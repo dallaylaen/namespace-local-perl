@@ -8,6 +8,10 @@ use Test::Exception;
 my $package = do {
     package Foo;
 
+    sub above {
+        return private() + 1;
+    };
+
     sub public {
         use namespace::local;
         return private();
@@ -27,6 +31,10 @@ TODO: {
     local $TODO = "known bug in namespace::local";
     lives_ok {
         is $package->public, 42, "value as expected";
+    } "call lives";
+
+    lives_ok {
+        is $package->above, 43, "value as expected";
     } "call lives";
 };
 
