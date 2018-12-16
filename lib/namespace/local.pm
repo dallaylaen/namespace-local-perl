@@ -419,7 +419,7 @@ sub replace_symbols {
                 *{ $package."::".$name } = $copy->{$type};
                 1;
             } || do {
-                Carp::cluck "namespace::local: working around error: $@";
+                carp "namespace::local: failed to write $package :: $name ($type), but trying to continue: $@";
             };
         };
     };
