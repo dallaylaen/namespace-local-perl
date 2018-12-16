@@ -337,14 +337,16 @@ sub erase_only_symbols {
     my $package = $self->{target};
     my @list = keys %$table;
 
-    # read all necessary symbols
+    # load all necessary symbols
     my $current = $self->read_symbols( \@list );
 
+    # filter out what we were going to delete
     foreach my $name ( @list ) {
         $table->{$name}{$_} and delete $current->{$name}{$_}
             for @TYPES;
     };
 
+    # put it back in place
     $self->replace_symbols( \@list, $current );
 };
 
@@ -370,15 +372,21 @@ sub read_symbols {
     return \%content;
 };
 
-# In: package
-# Out: (none)
-# Side effect: destroys symbol table
+# This method's signature is a bit counterintuitive:
+# $self->replace_symbols( \@names_to_erase, \%new_table_entries )
+# If first argument is omitted, the whole namespace is scanned instead.
+# Separate erase_symbols and write_symbols turned out to be cumbersome
+#    because of the need to handle granular exclusion list.
+# This method can fill both roles.
+# Providing an empty list would make it just write the symbol table,
+#    whereas an empty hash would mean deletion only.
 sub replace_symbols {
     my ($self, $clear_list, $table) = @_;
 
     my $package = $self->{target};
 
     $clear_list ||= [ $self->read_names ];
+    $table ||= {};
 
     my %uniq;
     $uniq{$_}++ for keys %$table, @$clear_list;
@@ -400,15 +408,16 @@ sub replace_symbols {
             delete ${ $package."::" }{$name};
         };
 
-        foreach my $type ( @TYPES ) {
-            defined $copy->{$type} or next;
+        foreach my $type ( keys %$copy ) {
+            ref $copy->{$type} or next;
             eval {
                 # FIXME on perls 5.014..5.022 this block fails
                 # because @ISA is readonly.
                 # So we wrap it in eval with no catch
                 # until a better solution is done
                 no strict 'refs'; ## no critic
-                *{ $package."::".$name } = $copy->{$type}
+                *{ $package."::".$name } = $copy->{$type};
+                1;
             } || do {
                 Carp::cluck "namespace::local: working around error: $@";
             };
