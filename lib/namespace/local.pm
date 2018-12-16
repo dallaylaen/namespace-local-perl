@@ -279,8 +279,7 @@ sub prepare {
     #     thus preventing subsequent imports from leaking upwards
     # I do not know why it works, it shouldn't.
     if ($action eq '-around') {
-        $self->erase_symbols;
-        $self->write_symbols( $table );
+        $self->replace_symbols( undef, $table );
     };
 
     if ($action eq '-above' ) {
@@ -289,8 +288,7 @@ sub prepare {
         };
     } else {
         $self->{todo} = sub {
-            $self->erase_symbols;
-            $self->write_symbols( $table );
+            $self->replace_symbols( undef, $table );
         };
     };
 };
@@ -305,6 +303,9 @@ sub execute {
     $self->{todo}->()
         unless $self->{done}++;
 };
+
+# Don't touch NAME, PACKAGE, and GLOB itself
+my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
 # in: package name
 # out: sorted & filtered list of symbols
@@ -330,25 +331,6 @@ sub read_names {
     return @list;
 };
 
-# Don't touch NAME, PACKAGE, and GLOB itself
-my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
-
-# In: package
-# Out: (none)
-# Side effect: destroys symbol table
-sub erase_symbols {
-    my ($self, $list) = @_;
-
-    my $package = $self->{target};
-    $list ||= [ $self->read_names ];
-
-    foreach my $name( @$list ) {
-        next if $self->{touch_not}{$name};
-        no strict 'refs'; ## no critic
-        delete ${ $package."::" }{$name};
-    };
-};
-
 sub erase_only_symbols {
     my ($self, $table) = @_;
 
@@ -363,8 +345,7 @@ sub erase_only_symbols {
             for @TYPES;
     };
 
-    $self->erase_symbols( \@list );
-    $self->write_symbols( $current );
+    $self->replace_symbols( \@list, $current );
 };
 
 # In: package, symbol
@@ -389,19 +370,18 @@ sub read_symbols {
     return \%content;
 };
 
-# In: package, symbol, hash
+# In: package
 # Out: (none)
-# Side effect: recreates *package::symbol
-sub write_symbols {
-    my ($self, $table) = @_;
+# Side effect: destroys symbol table
+sub replace_symbols {
+    my ($self, $clear_list, $table) = @_;
 
     my $package = $self->{target};
 
-    # TODO lumping touch_not and $table together is a workaround
-    #     for erase_symbols skipping over touch_not altogether.
-    # It does not belong here, and should be fixed at some point.
+    $clear_list ||= [ $self->read_names ];
+
     my %uniq;
-    $uniq{$_}++ for keys %$table, keys %{ $self->{touch_not} };
+    $uniq{$_}++ for keys %$table, @$clear_list;
 
     foreach my $name( keys %uniq ) {
         my $copy = $table->{$name} || {};
@@ -430,8 +410,7 @@ sub write_symbols {
                 no strict 'refs'; ## no critic
                 *{ $package."::".$name } = $copy->{$type}
             } || do {
-                Carp::cluck "namespace::local: working around error: $@"
-                    unless $@ =~ /^Modification of a read-only/;
+                Carp::cluck "namespace::local: working around error: $@";
             };
         };
     };

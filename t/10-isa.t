@@ -16,8 +16,9 @@ use Test::Exception;
     use namespace::local -above;
 };
 
+is_deeply \@Foo::ISA, ["Bar"], "\@ISA as expected";
 lives_ok {
-    is( Foo->bar, 42, "\@ISA propagates no matter what" );
+    is( Foo->bar, 42, "inherited method propagates" );
 } "method didn't die";
 
 done_testing;
