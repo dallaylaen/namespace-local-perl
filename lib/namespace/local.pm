@@ -436,13 +436,13 @@ sub _croak {
     croak ("namespace::local: ".shift);
 };
 
-=head1 AUTHOR
-
-Konstantin S. Uvarin, C<< <khedin at gmail.com> >>
-
 =head1 BUGS
 
-This is experimental module. There certainly are bugs.
+As of 0.0604, C<-around> hides subroutines defined below its scope end
+from anything above it.
+No solution exists so far.
+
+This is experimental module. There certainly are more bugs.
 
 Bug reports, feature requests, suggestions and general feedback welcome at:
 
@@ -496,7 +496,7 @@ L<B::Hooks::EndOfScope> is used as a backend.
 
 =head1 LICENSE AND COPYRIGHT
 
-Copyright 2018 Konstantin S. Uvarin.
+Copyright 2018 Konstantin S. Uvarin, C<< <khedin at gmail.com> >>
 
 This program is free software; you can redistribute it and/or modify it
 under the terms of the the Artistic License (2.0). You may obtain a
