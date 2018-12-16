@@ -25,6 +25,6 @@ throws_ok {
 } qr/a deliberate exception in bar.*HASH/, "bar() works as expected";
 
 ok !Foo->can("croak"), "Foo cannot croak";
-ok !Foo->can("refaddr"), "Foo cannot refaddr";
+ok !Foo->can("reftype"), "Foo cannot reftype";
 
 done_testing;
