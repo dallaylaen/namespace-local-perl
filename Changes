@@ -1,5 +1,8 @@
 Revision history for namespace-local
 
+0.0604  Sun Dec 16 2018
+        - Refine symbol table handling
+
 0.0603  Sun Dec 16 2018
         - Add hotfix for "Modification of a rean-only value" in 5.014..5.022
 

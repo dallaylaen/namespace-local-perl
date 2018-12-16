@@ -4,7 +4,7 @@ use warnings FATAL => 'all';
 
 package namespace::local;
 
-our $VERSION = '0.0603';
+our $VERSION = '0.0604';
 
 =head1 NAME
 
