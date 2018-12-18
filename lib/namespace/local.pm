@@ -175,6 +175,8 @@ sub import {
     $command->prepare;
 
     on_scope_end {
+        local $Carp::Internal{'B::Hooks::EndOfScope::XS'} = 1;
+        local $Carp::Internal{'B::Hooks::EndOfScope'} = 1;
         pop @stack;
         $command->execute;
     };
@@ -190,7 +192,9 @@ use Carp;
 use Scalar::Util qw(refaddr);
 our @CARP_NOT = qw(namespace::local);
 
-# target => package_name is required
+### Setup methods
+
+# requires caller => [caller] argument
 sub new {
     my ($class, %opt) = @_;
 
@@ -272,6 +276,8 @@ sub touch_not {
     };
 };
 
+### Command pattern split into prepare + execute
+
 # side effects + setup self->execute
 sub prepare {
     my $self = shift;
@@ -281,10 +287,10 @@ sub prepare {
     my $table = $self->read_symbols;
 
     if ($action eq '-around') {
-        # Overwrite symbol table with a copy of itself
+        # Overwrite symbol table with a copy of itself.
         # Somehow this triggers binding of symbols in the code
         #    that was parsed so far (i.e. above the 'use' line)
-        #    and undefined symbols remain so forever
+        #    and undefined symbols (in that area) remain so forever
         $self->write_symbols( $table );
     };
 
@@ -310,33 +316,18 @@ sub execute {
         unless $self->{done}++;
 };
 
-# Don't touch NAME, PACKAGE, and GLOB itself
+### High-level effectful functions
+
+# Here and below, the following data format is used:
+# `symtable` := { `name` => { `type` => `$ref` } }
+# `type` is one of known variable types listed in @TYPES below
+# `$ref` is a reference of corresponding type
+
+# Don't touch NAME, PACKAGE, and GLOB that are alsoknown to Perl
 my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
-# in: package name
-# out: sorted & filtered list of symbols
-
-# FIXME needs explanation
-# We really need to filter because copying ALL table
-#     was preventing on_scope_end from execution
-#     (accedental reference count increase?..)
-
-sub read_names {
-    my $self = shift;
-
-    my $package = $self->{target};
-    my $except = $self->{except_rex};
-
-    my @list = sort grep {
-        /^\w+$/ and $_ !~ $except
-    } do {
-        no strict 'refs'; ## no critic
-        keys %{ $package."::" };
-    };
-
-    return @list;
-};
-
+# In: symbol table hashref
+# Out: side effect
 sub erase_only_symbols {
     my ($self, $table) = @_;
 
@@ -354,28 +345,6 @@ sub erase_only_symbols {
 
     # put it back in place
     $self->replace_symbols( \@list, $current );
-};
-
-# In: package, symbol
-# Out: a hash with glob content
-sub read_symbols {
-    my ($self, $list) = @_;
-
-    my $package = $self->{target};
-    $list ||= [ $self->read_names ];
-
-    my %content;
-    foreach my $name ( @$list ) {
-        foreach my $type (@TYPES) {
-            my $value = do {
-                no strict 'refs'; ## no critic
-                *{$package."::".$name}{$type};
-            };
-            $content{$name}{$type} = $value if defined $value;
-        };
-    };
-
-    return \%content;
 };
 
 # This method's signature is a bit counterintuitive:
@@ -405,38 +374,10 @@ sub replace_symbols {
     $self->write_symbols( $diff );
 };
 
-# writes raw symbols, ignoring touch_not!
-sub write_symbols {
-    my ($self, $table) = @_;
-
-    my $package = $self->{target};
-
-    foreach my $name( keys %$table ) {
-        my $copy = $table->{$name};
-
-        {
-            no strict 'refs'; ## no critic
-            delete ${ $package."::" }{$name};
-        };
-
-        foreach my $type ( keys %$copy ) {
-            ref $copy->{$type} or next;
-            eval {
-                # FIXME on perls 5.014..5.022 this block fails
-                # because @ISA is readonly.
-                # So we wrap it in eval with no catch
-                # until a better solution is done
-                no strict 'refs'; ## no critic
-                *{ $package."::".$name } = $copy->{$type};
-                1;
-            } || do {
-                carp "namespace::local: failed to write $package :: $name ($type), but trying to continue: $@";
-            };
-        };
-    };
-};
-
 # Oddly enough, pure
+# In: old and new two symbol table hashrefs
+# Out: part of new table that differs from the old,
+#      with touch_not rules applied
 sub table_diff {
     my ($self, $old_table, $new_table) = @_;
 
@@ -482,6 +423,86 @@ sub table_diff {
     };
 
     return $diff;
+};
+
+### Low-level symbol-table read & write
+### no magic should happen above this line
+
+# NOTE that even here we are in full strict mode
+# The pattern for working with raw data is this:
+# my $value = do { no strict 'refs'; ... }; ## no critic
+
+# in: none
+# out: sorted & filtered list of symbols
+sub read_names {
+    my $self = shift;
+
+    my $package = $self->{target};
+    my $except = $self->{except_rex};
+
+    my @list = sort grep {
+        /^\w+$/ and $_ !~ $except
+    } do {
+        no strict 'refs'; ## no critic
+        keys %{ $package."::" };
+    };
+
+    return @list;
+};
+
+# In: symbol list arrayref (read_symbols if none)
+# Out: symbol table hashref
+sub read_symbols {
+    my ($self, $list) = @_;
+
+    my $package = $self->{target};
+    $list ||= [ $self->read_names ];
+
+    my %content;
+    foreach my $name ( @$list ) {
+        foreach my $type (@TYPES) {
+            my $value = do {
+                no strict 'refs'; ## no critic
+                *{$package."::".$name}{$type};
+            };
+            $content{$name}{$type} = $value if defined $value;
+        };
+    };
+
+    return \%content;
+};
+
+# writes raw symbols, ignoring touch_not!
+# In: symbol table hashref
+# Out: none
+sub write_symbols {
+    my ($self, $table) = @_;
+
+    my $package = $self->{target};
+
+    foreach my $name( keys %$table ) {
+        my $copy = $table->{$name};
+
+        {
+            no strict 'refs'; ## no critic
+            delete ${ $package."::" }{$name};
+        };
+
+        foreach my $type ( keys %$copy ) {
+            ref $copy->{$type} or next;
+            eval {
+                # FIXME on perls 5.014..5.022 this block fails
+                # because @ISA is readonly.
+                # So we wrap it in eval with no catch
+                # until a better solution is done
+                no strict 'refs'; ## no critic
+                *{ $package."::".$name } = $copy->{$type};
+                1;
+            } || do {
+                carp "namespace::local: failed to write $package :: $name ($type), but trying to continue: $@";
+            };
+        };
+    };
 };
 
 sub _croak {
