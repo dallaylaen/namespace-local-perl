@@ -186,7 +186,8 @@ sub import {
 package
     namespace::local::_command;
 
-use Carp; # too
+use Carp;
+use Scalar::Util qw(refaddr);
 our @CARP_NOT = qw(namespace::local);
 
 # target => package_name is required
@@ -279,14 +280,12 @@ sub prepare {
 
     my $table = $self->read_symbols;
 
-    # FIXME UGLY HACK
-    # Immediate backup-and-restore of symbol table
-    #     somehow forces binding of symbols
-    #     above 'use namespace::local' line
-    #     thus preventing subsequent imports from leaking upwards
-    # I do not know why it works, it shouldn't.
     if ($action eq '-around') {
-        $self->replace_symbols( undef, $table );
+        # Overwrite symbol table with a copy of itself
+        # Somehow this triggers binding of symbols in the code
+        #    that was parsed so far (i.e. above the 'use' line)
+        #    and undefined symbols remain so forever
+        $self->write_symbols( $table );
     };
 
     if ($action eq '-above' ) {
@@ -390,25 +389,30 @@ sub read_symbols {
 sub replace_symbols {
     my ($self, $clear_list, $table) = @_;
 
-    my $package = $self->{target};
-
     $clear_list ||= [ $self->read_names ];
     $table ||= {};
 
     my %uniq;
     $uniq{$_}++ for keys %$table, @$clear_list;
 
-    foreach my $name( keys %uniq ) {
-        my $copy = $table->{$name} || {};
-        if ( my $skip = $self->{touch_not}{$name} ) {
-            foreach my $type (keys %$skip) {
-                my $value = do {
-                    no strict 'refs'; ## no critic
-                    *{$package."::".$name}{$type};
-                };
-                $copy->{$type} = $value if defined $value;
-            };
-        };
+    # re-read the symbol table
+    my $old_table = $self->read_symbols( [ keys %uniq ] );
+
+    # create a plan for change
+    my $diff = $self->table_diff( $old_table, $table );
+
+    # apply change
+    $self->write_symbols( $diff );
+};
+
+# writes raw symbols, ignoring touch_not!
+sub write_symbols {
+    my ($self, $table) = @_;
+
+    my $package = $self->{target};
+
+    foreach my $name( keys %$table ) {
+        my $copy = $table->{$name};
 
         {
             no strict 'refs'; ## no critic
@@ -430,6 +434,54 @@ sub replace_symbols {
             };
         };
     };
+};
+
+# Oddly enough, pure
+sub table_diff {
+    my ($self, $old_table, $new_table) = @_;
+
+    my %uniq_name;
+    $uniq_name{$_}++ for keys %$old_table, keys %$new_table;
+
+    my $diff;
+
+    # iterate over keys of both, 2 levels deep
+    foreach my $name (sort keys %uniq_name) {
+        my $old  = $old_table->{$name} || {};
+        my $new  = $new_table->{$name} || {};
+        my $skip = $self->{touch_not}{$name} || {};
+
+        my %uniq_type;
+        $uniq_type{$_}++ for keys %$old, keys %$new;
+
+        foreach my $type (sort keys %uniq_type) {
+            next if $skip->{$type};
+
+            if (ref $old->{$type} ne ref $new->{$type}) {
+                # As nonrefs are not allowed here,
+                # this also handles undef vs. defined case
+                $diff->{$name}{$type} = $new->{$type};
+                next;
+            };
+
+            # both undef, nothing to see here
+            next unless ref $new->{$type};
+
+            # pointing to different things
+            if (refaddr $old->{$type} != refaddr $new->{$type}) {
+                $diff->{$name}{$type} = $new->{$type};
+                next;
+            };
+        };
+
+        if ($diff->{$name}) {
+            # now if we cannot avoid overwriting,
+            # make sure to copy over ALL skipped values for this name
+            $diff->{$name}{$_} = $old->{$_} for keys %$skip;
+        };
+    };
+
+    return $diff;
 };
 
 sub _croak {
