@@ -13,7 +13,7 @@ throws_ok {
 } qr/Undefined subroutine.*main::blessed/, "Don't leak upward";
 
 do {
-    use namespace::local;
+    use namespace::local -around;
     use Scalar::Util qw(blessed);
 
     lives_ok {

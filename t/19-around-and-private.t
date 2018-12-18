@@ -31,11 +31,11 @@ TODO: {
     local $TODO = "known bug in namespace::local";
     lives_ok {
         is $package->public, 42, "value as expected";
-    } "call lives";
+    } "inner lives";
 
     lives_ok {
         is $package->above, 43, "value as expected";
-    } "call lives";
+    } "above lives";
 };
 
 done_testing;
