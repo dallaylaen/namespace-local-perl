@@ -192,6 +192,9 @@ use Carp;
 use Scalar::Util qw(refaddr);
 our @CARP_NOT = qw(namespace::local);
 
+# TODO need better env parsing...
+use constant DEBUG => ( lc ($ENV{PERL_NAMESPACE_LOCAL} || '' ) eq 'debug' ? 1 : 0 );
+
 ### Setup methods
 
 # requires caller => [caller] argument
@@ -370,6 +373,9 @@ sub replace_symbols {
     # create a plan for change
     my $diff = $self->table_diff( $old_table, $table );
 
+    $self->message( "package $self->{target} to be altered: ".dump_table($diff) )
+        if DEBUG and keys %$diff;
+
     # apply change
     $self->write_symbols( $diff );
 };
@@ -503,6 +509,30 @@ sub write_symbols {
             };
         };
     };
+};
+
+### Logging
+
+sub dump_table {
+    my $table = shift;
+
+    my @out;
+    foreach my $name( sort keys %$table ) {
+        my $glob = $table->{$name};
+        foreach my $type( sort keys %$glob ) {
+            push @out, "*$name\{$type\}=".($glob->{$type} || 'undef');
+        };
+    };
+
+    return join ", ", @out;
+};
+
+
+sub message {
+    my ($self, $msg) = @_;
+
+    $msg =~ s/\n$//s;
+    carp "$msg via namespace::local from $self->{origin}";
 };
 
 sub _croak {
