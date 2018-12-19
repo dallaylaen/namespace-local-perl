@@ -4,20 +4,23 @@ use strict;
 use warnings;
 use Test::More;
 
-my $trace;
+my @trace;
 {
     package Foo;
     sub new { bless {}, shift };
     use namespace::local -below;
-    sub DESTROY { $trace++ };
+    our @DESTROY = qw(foo bar);
+    sub DESTROY { push @trace, \@DESTROY };
 };
+
+is_deeply \@Foo::DESTROY, [], "\@DESTROY array looks empty from the outside";
 
 my $foo = Foo->new;
 
-is $trace, undef, "no destroy called";
+is_deeply \@trace, [], "no destroy called";
 
 undef $foo;
 
-is $trace, 1, "destroy called once";
+is_deeply \@trace, [[qw[foo bar]]], "destroy called once, data in array not deleted";
 
 done_testing;

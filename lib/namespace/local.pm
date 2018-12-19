@@ -110,13 +110,16 @@ The following symbols are not touched by this module, to avoid breaking things:
 
 =item * Arrays: C<@CARP_NOT>, C<@EXPORT>, C<@EXPORT_OK>, C<@ISA>;
 
-=item * Scalars: C<$AUTOLOAD>, C<$a>, C<$b>;
+=item * Scalars: C<$AUTOLOAD>, C<$DESTROY>*, C<$a>, C<$b>;
 
 =item * Files: C<DATA>, C<STDERR>, C<STDIN>, C<STDOUT>;
 
 =item * Functions: C<AUTOLOAD>, C<DESTROY>, C<import>;
 
 =back
+
+*C<$DESTROY> is not a special variable, however,
+changing it was causing segfault in Perl 5.10.1
 
 This list is likely incomplete, and may grow in the future.
 
@@ -213,7 +216,7 @@ sub new {
     $opt{touch_not}{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
     $opt{touch_not}{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
     $opt{touch_not}{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
-    $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD a b );
+    $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD DESTROY a b );
 
     return bless \%opt, $class;
 };
@@ -372,11 +375,12 @@ sub replace_symbols {
 
     # create a plan for change
     my $diff = $self->table_diff( $old_table, $table );
-
-    $self->message( "package $self->{target} to be altered: ".dump_table($diff) )
-        if DEBUG and keys %$diff;
+    return unless keys %$diff;
 
     # apply change
+    $self->message( "package $self->{target} to be altered: ".dump_table($diff) )
+        if DEBUG;
+
     $self->write_symbols( $diff );
 };
 
@@ -422,8 +426,8 @@ sub table_diff {
         };
 
         if ($diff->{$name}) {
-            # now if we cannot avoid overwriting,
-            # make sure to copy over ALL skipped values for this name
+            # if we cannot avoid overwriting,
+            # make sure to copy ALL skipped values we know of
             $diff->{$name}{$_} = $old->{$_} for keys %$skip;
         };
     };
