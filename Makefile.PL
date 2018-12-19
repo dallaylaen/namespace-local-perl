@@ -15,8 +15,9 @@ WriteMakefile(
         'ExtUtils::MakeMaker' => '0',
     },
     BUILD_REQUIRES => {
-        'Test::More' => '0.98',
-        'Test::Exception' => '0',
+        'Test::Exception' => 0,
+        'Test::More'      => 0.98,
+        'Test::Warn'      => 0.36,
     },
     PREREQ_PM => {
         'B::Hooks::EndOfScope' => '0',
