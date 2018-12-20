@@ -10,7 +10,7 @@ use Test::More;
     sub before { bar() };
 
     {
-        use namespace::local -except => ['inner'];
+        use namespace::local -around, -except => ['inner'];
         no warnings 'redefine';
         sub bar { 137 };
         sub inner { bar() };

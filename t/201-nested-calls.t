@@ -36,12 +36,12 @@ use Test::Exception;
         };
 
         # the outer scope starts
-        use namespace::local;
+        use namespace::local -around;
         use Scalar::Util qw(blessed);
 
         if ($scope eq 'inner') {
             # this is nested scope for which this test has been built
-            use namespace::local;
+            use namespace::local -around;
             use Scalar::Util qw(looks_like_number);
 
             return blessed({}) if $action eq 'blessed';

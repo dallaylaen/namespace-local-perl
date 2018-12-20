@@ -15,7 +15,7 @@ namespace::local - Confine imports or functions to a given scope
 This module allows to confine imports or private functions
 to a given scope. The following modes of operation exist:
 
-=head2 -around (the default)
+=head2 -around
 
 This confines all subsequent imports and functions
 between the use of L<namespace::local> and the end of scope.
@@ -27,7 +27,7 @@ between the use of L<namespace::local> and the end of scope.
     }
 
     sub using_import {
-        use namespace::local;
+        use namespace::local -around;
         use Some::Crazy::DSL qw(frobnicate);
         frobnicate Foo => 42;
     }
@@ -36,7 +36,7 @@ between the use of L<namespace::local> and the end of scope.
         # frobnicate() is unknown
     }
 
-=head2 -below
+=head2 -below (the default)
 
 Hides subsequent imports and functions on end of scope.
 
@@ -169,6 +169,13 @@ with L<namespace::local>.
 However, at least C<-above> and C<-below> switches
 work as expected if used simultaneously.
 
+Up to v.0.07, C<-around> used to be the default mode instead of C<-below>.
+C<-around> is much more restrictive, in particular, it prevents functions
+defined below the block from propagating above the block.
+
+This is less of a problem than imported functions leaking upward.
+No perfect solution has yet been found.
+
 =cut
 
 # this was stolen from namespace::clean
@@ -217,11 +224,11 @@ sub new {
     my ($class, %opt) = @_;
 
     # TODO check options
-    $opt{except_rex} = qr/^[0-9]+$|^_$/; # no matter what, exempt $_, $1, ...
-    $opt{only_rex}   = qr/^/; # match all
-    $opt{action}     = '-around';
-    $opt{target}     = $opt{caller}[0];
-    $opt{origin}     = join ":", @{$opt{caller}}[1,2];
+    $opt{except_rex} ||= qr/^[0-9]+$|^_$/; # no matter what, exempt $_, $1, ...
+    $opt{only_rex}   ||= qr/^/; # match all
+    $opt{action}     ||= '-below';
+    $opt{target}     ||= $opt{caller}[0];
+    $opt{origin}     ||= join ":", @{$opt{caller}}[1,2];
 
     # Skip some well-known variables and functions
     # Format: touch_not{ $name }{ $type }
@@ -335,6 +342,10 @@ sub prepare {
         #    that was parsed so far (i.e. above the 'use' line)
         #    and undefined symbols (in that area) remain so forever
         $self->write_symbols( $table );
+    } elsif ( $action eq '-below' ) {
+        # Stabilize known functions, leave everything else as is
+        my $func = $self->filter_functions( $table );
+        $self->write_symbols( $func );
     };
 
     if ($action eq '-above' ) {
@@ -419,6 +430,19 @@ sub replace_symbols {
         if DEBUG;
 
     $self->write_symbols( $diff );
+};
+
+sub filter_functions {
+    my ($self, $table) = @_;
+
+    my %new_table;
+
+    foreach (keys %$table) {
+        $new_table{$_} = $table->{$_}
+            if defined $table->{$_}{CODE};
+    };
+
+    return \%new_table;
 };
 
 # Oddly enough, pure
@@ -523,6 +547,8 @@ sub read_symbols {
 
     my $package = $self->{target};
     $list ||= [ $self->read_names ];
+    $list = [ grep { $self->{restrict_symbols}{$_} } @$list ]
+        if $self->{restrict_symbols};
 
     my %content;
     foreach my $name ( @$list ) {

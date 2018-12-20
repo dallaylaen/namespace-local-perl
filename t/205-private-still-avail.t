@@ -25,17 +25,14 @@ my $package = do {
 };
 
 ok $package->can("public"), "public sub available";
-ok $package->can("private"), "private sub available (no masking)";
+ok $package->can("private"), "private sub available (no masking was requested)";
 
-TODO: {
-    local $TODO = "known bug in namespace::local";
-    lives_ok {
-        is $package->public, 42, "value as expected";
-    } "inner lives";
+lives_ok {
+    is $package->public, 42, "value as expected";
+} "inner lives";
 
-    lives_ok {
-        is $package->above, 43, "value as expected";
-    } "above lives";
-};
+lives_ok {
+    is $package->above, 43, "value as expected";
+} "above lives";
 
 done_testing;
