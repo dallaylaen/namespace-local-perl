@@ -1,0 +1,6 @@
+# Test groups
+
+t/0?? - load ok, if this fails, stop
+t/1?? - basic functions & switches
+t/2?? - interference and reenterability
+t/3?? - corner cases and magic variables
