@@ -98,6 +98,18 @@ from the module's action.
 
 Note that sigils are ignored here.
 
+=head2 -only => \@list
+
+Only affect the listed symbols (with sigils).
+Rules are the same as for -except.
+
+=head2 -only => <regex>
+
+Only affect symbols with matching names.
+
+All C<-only> and C<-except> options act together, further restricting the
+set of affected symbols.
+
 =head1 EXEMPTIONS
 
 The following symbols are not touched by this module, to avoid breaking things:
@@ -206,9 +218,10 @@ sub new {
 
     # TODO check options
     $opt{except_rex} = qr/^[0-9]+$|^_$/; # no matter what, exempt $_, $1, ...
-    $opt{action} = '-around';
-    $opt{target} = $opt{caller}[0];
-    $opt{origin} = join ":", @{$opt{caller}}[1,2];
+    $opt{only_rex}   = qr/^/; # match all
+    $opt{action}     = '-around';
+    $opt{target}     = $opt{caller}[0];
+    $opt{origin}     = join ":", @{$opt{caller}}[1,2];
 
     # Skip some well-known variables and functions
     # Format: touch_not{ $name }{ $type }
@@ -258,13 +271,38 @@ sub parse_options {
             } else {
                 _croak( "-except argument must be regexp or array" )
             };
+        } elsif ($arg eq '-only') {
+            my $cond = shift;
+            if (ref $cond eq 'Regexp') {
+                $self->{only_rex} = $cond;
+            } elsif (ref $cond eq 'ARRAY') {
+                $self->restrict( @$cond );
+            } else {
+                _croak( "-except argument must be regexp or array" )
+            };
         } else {
             _croak( "unknown option $arg" );
         };
     };
 };
 
-# TODO join with @TYPE array from below
+sub touch_not {
+    my ($self, @list) = @_;
+
+    foreach (sigil_to_type(@list)) {
+        $self->{touch_not}{ $_->[0] }{ $_->[1] }++
+    };
+};
+
+sub restrict {
+    my ($self, @list) = @_;
+
+    foreach (sigil_to_type(@list)) {
+        $self->{restrict_symbols}{ $_->[0] }{ $_->[1] }++
+    };
+};
+
+# TODO join with @TYPES array from below
 my %sigil = (
     ''  => 'CODE',
     '$' => 'SCALAR',
@@ -272,14 +310,13 @@ my %sigil = (
     '@' => 'ARRAY',
 );
 
-sub touch_not {
-    my ($self, @list) = @_;
-
-    foreach (@list) {
+# returns [ name, type ] for each argument
+sub sigil_to_type {
+    map {
         /^([\$\@\%]?)(\w+)$/
             or _croak( "cannot exempt sybmol $_: unsupported format" );
-        $self->{touch_not}{$2}{ $sigil{$1} }++
-    };
+        [ $2, $sigil{$1} ]
+    } @_;
 };
 
 ### Command pattern split into prepare + execute
@@ -394,13 +431,31 @@ sub table_diff {
     my %uniq_name;
     $uniq_name{$_}++ for keys %$old_table, keys %$new_table;
 
+    my $touch_not = $self->{touch_not};
+
+    if (my $restrict = $self->{restrict_symbols}) {
+        # If a restriction is in place, invert it and merge into skip
+        # TODO write this better
+        # TODO does it really belong here?
+        $restrict->{$_} or delete $uniq_name{$_} for keys %uniq_name;
+        my %real_touch_not;
+        foreach my $name (keys %uniq_name) {
+            # 2 levels of shallow copy is enough
+            foreach my $type( @TYPES ) {
+                $real_touch_not{$name}{$type}++
+                    unless $restrict->{$name}{$type} and not $touch_not->{$name}{$type};
+            };
+        };
+        $touch_not = \%real_touch_not;
+    };
+
     my $diff;
 
     # iterate over keys of both, 2 levels deep
     foreach my $name (sort keys %uniq_name) {
         my $old  = $old_table->{$name} || {};
         my $new  = $new_table->{$name} || {};
-        my $skip = $self->{touch_not}{$name} || {};
+        my $skip = $touch_not->{$name} || {};
 
         my %uniq_type;
         $uniq_type{$_}++ for keys %$old, keys %$new;
@@ -448,10 +503,11 @@ sub read_names {
     my $self = shift;
 
     my $package = $self->{target};
-    my $except = $self->{except_rex};
+    my $except  = $self->{except_rex};
+    my $only    = $self->{only_rex};
 
     my @list = sort grep {
-        /^\w+$/ and $_ !~ $except
+        /^\w+$/ and $_ !~ $except and $_ =~ $only
     } do {
         no strict 'refs'; ## no critic
         keys %{ $package."::" };
