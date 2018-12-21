@@ -426,7 +426,7 @@ sub replace_symbols {
     return unless keys %$diff;
 
     # apply change
-    $self->message( "package $self->{target} to be altered: ".dump_table($diff) )
+    $self->message( "package $self->{target} to be altered: ".dump_table($diff, $old_table) )
         if DEBUG;
 
     $self->write_symbols( $diff );
@@ -600,13 +600,15 @@ sub write_symbols {
 ### Logging
 
 sub dump_table {
-    my $table = shift;
+    my ($table, $old_table) = @_;
 
     my @out;
     foreach my $name( sort keys %$table ) {
         my $glob = $table->{$name};
         foreach my $type( sort keys %$glob ) {
             push @out, "*$name\{$type\}=".($glob->{$type} || 'undef');
+            $out[-1] .= sprintf "[was: %s]", $old_table->{$name}{$type} || 'undef'
+                if $old_table;
         };
     };
 
