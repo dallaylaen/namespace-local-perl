@@ -122,16 +122,13 @@ The following symbols are not touched by this module, to avoid breaking things:
 
 =item * Arrays: C<@CARP_NOT>, C<@EXPORT>, C<@EXPORT_OK>, C<@ISA>;
 
-=item * Scalars: C<$AUTOLOAD>, C<$DESTROY>*, C<$a>, C<$b>;
+=item * Scalars: C<$AUTOLOAD>, C<$a>, C<$b>;
 
 =item * Files: C<DATA>, C<STDERR>, C<STDIN>, C<STDOUT>;
 
 =item * Functions: C<AUTOLOAD>, C<DESTROY>, C<import>;
 
 =back
-
-*C<$DESTROY> is not a special variable, however,
-changing it was causing segfault in Perl 5.10.1
 
 This list is likely incomplete, and may grow in the future.
 
@@ -236,7 +233,7 @@ sub new {
     $opt{touch_not}{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
     $opt{touch_not}{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
     $opt{touch_not}{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
-    $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD DESTROY a b );
+    $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD a b );
 
     return bless \%opt, $class;
 };
@@ -508,6 +505,10 @@ sub table_diff {
             # if we cannot avoid overwriting,
             # make sure to copy ALL skipped values we know of
             $diff->{$name}{$_} = $old->{$_} for keys %$skip;
+
+            # removing a scalar copletely didn't work very well on Perl 5.10.1,
+            # causing segfaults in unrelated places.
+            $diff->{$name}{SCALAR} ||= \undef;
         };
     };
 
