@@ -251,7 +251,7 @@ package
 # whereas @Foo::ISA is $table->{ISA}{ARRAY}.
 
 use Carp;
-use Scalar::Util qw(refaddr);
+use Scalar::Util qw(blessed refaddr reftype);
 our @CARP_NOT = qw(namespace::local);
 
 # TODO need better env parsing...
@@ -654,19 +654,36 @@ sub dump_table {
     foreach my $name( sort keys %$table ) {
         my $glob = $table->{$name};
         foreach my $type( sort keys %$glob ) {
-            push @out, "*$name\{$type\}=".($glob->{$type} || 'undef');
-            if ($old_table) {
-                my $was = $old_table->{$name}{$type};
-                $out[-1] .= $was
-                    ? (refaddr $was || 0) == (refaddr $glob->{$type} || 0)
-                        ? '[unchanged]'
-                        : "[was: $was]"
-                    : '[was: undef]'
-            };
+            push @out, "*$name\{$type\}=".(
+                $old_table
+                    ? _is_and_was( $glob->{$type}, $old_table->{$name}{$type} )
+                    : _ref2str( $glob->{$type} )
+            );
         };
     };
 
     return join ", ", @out;
+};
+
+sub _is_and_was {
+    my ($new, $old) = @_;
+
+    if ((refaddr $new || 0) != (refaddr $old || 0)) {
+        return _ref2str( $new )."[was: "._ref2str( $old )."]";
+    } else {
+        return _ref2str( $new )."[unchanged]";
+    };
+};
+
+# TODO find existing?
+sub _ref2str {
+    my $ref = shift;
+
+    return ref $ref
+        ? blessed $ref
+            ? sprintf "%s=%s(0x%x)", ref $ref, reftype $ref, refaddr $ref
+            : sprintf "%s(0x%x)", ref $ref, refaddr $ref
+        : 'undef';
 };
 
 sub message {
