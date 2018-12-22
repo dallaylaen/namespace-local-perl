@@ -1,5 +1,12 @@
 Revision history for namespace-local
 
+0.08    Sat Dec 22 2018
+        - Add -only flag to restrict affected symbols
+        - Make -below the default instead of -around
+        - Add %OVERLOAD to exclusion list
+        - Add some debugging by setting env PERL_NAMESPACE_LOCAL=debug
+        - Lots of bugfix and test improvements
+
 0.07    Mon Dec 17 2018
         - Add more tests, document known bugs
 
