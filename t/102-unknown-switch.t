@@ -19,4 +19,8 @@ throws_ok {
     namespace::local->import( -except => [ '~www' ] );
 } qr/^namespace::local: cannot exempt.*~www\b/, "descriptive error (-except, bad symbol)";
 
+throws_ok {
+    namespace::local->import( -only => 'foobar' );
+} qr/^namespace::local:.* -only .* must be/, "descriptive error (-only)";
+
 done_testing;
