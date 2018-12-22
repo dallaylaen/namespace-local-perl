@@ -122,11 +122,13 @@ The following symbols are not touched by this module, to avoid breaking things:
 
 =item * Arrays: C<@CARP_NOT>, C<@EXPORT>, C<@EXPORT_OK>, C<@ISA>;
 
-=item * Scalars: C<$AUTOLOAD>, C<$a>, C<$b>;
+=item * Hashes: C<%OVERLOAD>;
 
 =item * Files: C<DATA>, C<STDERR>, C<STDIN>, C<STDOUT>;
 
 =item * Functions: C<AUTOLOAD>, C<DESTROY>, C<import>;
+
+=item * Scalars: C<$AUTOLOAD>, C<$a>, C<$b>;
 
 =back
 
@@ -275,6 +277,7 @@ sub new {
     # NOTE if you change the list, also change the EXEMPTIONS section in the POD.
     $opt{touch_not}{$_}{ARRAY}++  for qw( CARP_NOT EXPORT EXPORT_OK ISA );
     $opt{touch_not}{$_}{CODE}++   for qw( AUTOLOAD DESTROY import );
+    $opt{touch_not}{$_}{HASH}++   for qw( OVERLOAD );
     $opt{touch_not}{$_}{IO}++     for qw( DATA STDERR STDIN STDOUT );
     $opt{touch_not}{$_}{SCALAR}++ for qw( AUTOLOAD a b );
 
