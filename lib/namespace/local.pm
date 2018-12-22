@@ -13,7 +13,34 @@ namespace::local - Confine imports or functions to a given scope
 =head1 SYNOPSIS
 
 This module allows to confine imports or private functions
-to a given scope. The following modes of operation exist:
+to a given scope.
+
+    package My::Module;
+
+    sub normal_method {
+        # frobnicate; # nope!
+    };
+
+    sub method_with_sugar {
+        use namespace::local;
+        use Crazy::Prototyped::DSL qw(do_this do_that frobnicate);
+
+        do_this;
+        do_that;
+        frobnicate;
+    };
+
+    sub another_method {
+        # frobnicate; # nope!
+    };
+
+The calling module's symbol table is saved at the C<use> line
+and restored upon leaving the block.
+
+The subsequent imports will do their job within the block,
+but will not be available as methods at runtime.
+
+=head1 MODES OF OPERATION
 
 =head2 -around
 
@@ -164,9 +191,6 @@ This may be changed in the future.
 Due to order of callback execution in L<B::Hooks::EndOfScope>,
 other modules in C<namespace::> namespace may interact poorly
 with L<namespace::local>.
-
-However, at least C<-above> and C<-below> switches
-work as expected if used simultaneously.
 
 Up to v.0.07, C<-around> used to be the default mode instead of C<-below>.
 C<-around> is much more restrictive, in particular, it prevents functions
