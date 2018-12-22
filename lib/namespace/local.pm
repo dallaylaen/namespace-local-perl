@@ -132,7 +132,7 @@ The following symbols are not touched by this module, to avoid breaking things:
 
 This list is likely incomplete, and may grow in the future.
 
-=head1 METHOD/FUNCTIONS
+=head1 METHODS/FUNCTIONS
 
 None.
 
@@ -175,7 +175,6 @@ No perfect solution has yet been found.
 
 =cut
 
-# this was stolen from namespace::clean
 use B::Hooks::EndOfScope 'on_scope_end';
 
 my @stack;
@@ -186,7 +185,7 @@ sub import {
     my $command = namespace::local::_command->new( caller => [ caller ] );
     $command->parse_options( @_ );
 
-    # on_scope_end callback execution order is direct
+    # on_scope_end executes multiple callbacks as FIFO
     # we need reversed order, so use a stack of commands.
     $stack[-1]->set_next( $command ) if @stack;
     push @stack, $command;
@@ -201,11 +200,55 @@ sub import {
     };
 };
 
-# Hide internal OO engine
-# Maybe it will be released later...
+=head1 ENVIRONMENT
+
+Set C<PERL_NAMESPACE_LOCAL=debug> to see some debugging information
+upon module load.
+
+=head1 THE INTERNALS
+
+A stack of "command" objects is used behind the scenes.
+
+Its interface is not public, see this module's source.
+
+Calling
+
+=over
+
+=item new
+
+=back
+
+on this package will create a command object,
+I<not> a C<namespace::local> instance.
+
+The creation and destruction of command has no effect on the namespaces.
+
+Instead, special C<prepare> and C<execute> methods
+are called upon import and leaving scope, respectively.
+
+=cut
+
+sub new {
+    my $unused = shift;
+    namespace::local::_command->new(@_);
+};
 
 package
     namespace::local::_command;
+
+# FIRST AND FOREMOST
+
+# See C<perldoc perlmod> for how perl stores the Symbol Tables.
+
+# In this module we use two-level hashrefs to represent the table:
+# $table->{ $name }{ $type } = $reference
+# where $name is a function/variable/whatever name,
+# $type is one of ARRAY, CODE, FORMAT, HASH, IO, and SCALAR (see @TYPES below),
+# and $reference is a reference of corresponding type (or undef).
+
+# So Foo::bar() would be represented as $table->{foo}{CODE}
+# whereas @Foo::ISA is $table->{ISA}{ARRAY}.
 
 use Carp;
 use Scalar::Util qw(refaddr);
@@ -249,17 +292,19 @@ sub set_next {
 
 sub DESTROY {
     my $self = shift;
-    carp "probably a bug in namespace::local: callback set but not executed"
+    carp "probably a bug in namespace::local: callback set at $self->{origin} but never executed"
         if $self->{todo} and !$self->{done};
 };
 
 my %known_action;
 $known_action{$_}++ for qw(-above -below -around);
 
-# this changes nothing except the object itself
+# This changes nothing except the object itself
+# input is the same as that of namespace::local->import
 sub parse_options {
     my $self = shift;
 
+    # wrote a Getopt::Long from scratch...
     while (@_) {
         my $arg = shift;
         if ( $known_action{$arg} ) {
@@ -282,7 +327,7 @@ sub parse_options {
             } elsif (ref $cond eq 'ARRAY') {
                 $self->restrict( @$cond );
             } else {
-                _croak( "-except argument must be regexp or array" )
+                _croak( "-only argument must be regexp or array" )
             };
         } else {
             _croak( "unknown option $arg" );
@@ -325,7 +370,9 @@ sub sigil_to_type {
 
 ### Command pattern split into prepare + execute
 
-# side effects + setup self->execute
+# input: none
+# output: none
+# side effects: modify target package + setup callback for self->execute
 sub prepare {
     my $self = shift;
 
@@ -356,6 +403,9 @@ sub prepare {
     };
 };
 
+# input: none
+# output: none
+# side effect: modify target package
 sub execute {
     my ($self) = @_;
 
@@ -369,12 +419,7 @@ sub execute {
 
 ### High-level effectful functions
 
-# Here and below, the following data format is used:
-# `symtable` := { `name` => { `type` => `$ref` } }
-# `type` is one of known variable types listed in @TYPES below
-# `$ref` is a reference of corresponding type
-
-# Don't touch NAME, PACKAGE, and GLOB that are alsoknown to Perl
+# Don't ever touch NAME, PACKAGE, and GLOB that are also known to Perl
 my @TYPES = qw(SCALAR ARRAY HASH CODE IO FORMAT);
 
 # In: symbol table hashref
@@ -682,9 +727,14 @@ L<http://search.cpan.org/dist/namespace-local/>
 
 =head1 SEE ALSO
 
-L<namespace::clean>, L<namespace::sweep>, L<namespace::autoclean>...
+L<namespace::clean> gave the inspiration for this module.
+
+L<namespace::sweep>, L<namespace::autoclean> and probably more also clean
+caller's namespace, but differently.
 
 L<B::Hooks::EndOfScope> is used as a backend.
+
+L<perlmod/Symbol Tables> explains how reading/writing the namespace works.
 
 =head1 LICENSE AND COPYRIGHT
 
