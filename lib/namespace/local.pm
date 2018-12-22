@@ -259,11 +259,11 @@ use constant DEBUG => ( lc ($ENV{PERL_NAMESPACE_LOCAL} || '' ) eq 'debug' ? 1 : 
 
 ### Setup methods
 
-# requires caller => [caller] argument
 sub new {
     my ($class, %opt) = @_;
 
     # TODO check options
+    $opt{caller}     ||= [ caller 0 ];
     $opt{except_rex} ||= qr/^[0-9]+$|^_$/; # no matter what, exempt $_, $1, ...
     $opt{only_rex}   ||= qr/^/; # match all
     $opt{action}     ||= '-below';
@@ -467,10 +467,6 @@ sub replace_symbols {
     my $diff = $self->table_diff( $old_table, $table );
     return unless keys %$diff;
 
-    # apply change
-    $self->message( "package $self->{target} to be altered: ".dump_table($diff, $old_table) )
-        if DEBUG;
-
     $self->write_symbols( $diff );
 };
 
@@ -618,6 +614,12 @@ sub write_symbols {
 
     my $package = $self->{target};
 
+    if (DEBUG) {
+        my $old_table = $self->read_symbols;
+        $self->message( "package $self->{target} to be altered: ".dump_table($table, $old_table) )
+    };
+
+
     foreach my $name( keys %$table ) {
         my $copy = $table->{$name};
 
@@ -653,14 +655,19 @@ sub dump_table {
         my $glob = $table->{$name};
         foreach my $type( sort keys %$glob ) {
             push @out, "*$name\{$type\}=".($glob->{$type} || 'undef');
-            $out[-1] .= sprintf "[was: %s]", $old_table->{$name}{$type} || 'undef'
-                if $old_table;
+            if ($old_table) {
+                my $was = $old_table->{$name}{$type};
+                $out[-1] .= $was
+                    ? (refaddr $was || 0) == (refaddr $glob->{$type} || 0)
+                        ? '[unchanged]'
+                        : "[was: $was]"
+                    : '[was: undef]'
+            };
         };
     };
 
     return join ", ", @out;
 };
-
 
 sub message {
     my ($self, $msg) = @_;
