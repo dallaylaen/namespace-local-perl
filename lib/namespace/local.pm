@@ -233,7 +233,7 @@ are called upon import and leaving scope, respectively.
 
 sub new {
     my $unused = shift;
-    namespace::local::_command->new(@_);
+    namespace::local::_command->new(caller => [caller 0], @_);
 };
 
 package
