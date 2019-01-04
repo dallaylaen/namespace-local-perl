@@ -101,6 +101,21 @@ This emulates L<namespace::clean>, by which this module is clearly inspired.
 
     # now define public functions here
 
+=head2 no namespace::local
+
+Use C<no namespace::local> (C<unimport>) to force end of scope for the latest
+L<namespace::local> instance in action:
+
+    package My::Module;
+
+    use namespace::local;
+    sub private { ... };
+    no namespace::local;
+
+    # private not available here, even though the scope didn't end!
+
+No options are currently supported.
+
 =head1 OPTIONS
 
 Extra options may be passed to namespace::local:
@@ -201,6 +216,7 @@ No perfect solution has yet been found.
 
 =cut
 
+use Carp;
 use B::Hooks::EndOfScope 'on_scope_end';
 
 my @stack;
@@ -219,11 +235,26 @@ sub import {
     $command->prepare;
 
     on_scope_end {
-        local $Carp::Internal{'B::Hooks::EndOfScope::XS'} = 1;
-        local $Carp::Internal{'B::Hooks::EndOfScope'} = 1;
-        pop @stack;
-        $command->execute;
+        if (!$command->is_done) {
+            pop @stack; # make sure push == pop
+            local $Carp::Internal{'B::Hooks::EndOfScope::XS'} = 1;
+            local $Carp::Internal{'B::Hooks::EndOfScope'} = 1;
+            $command->execute;
+        };
     };
+};
+
+sub unimport {
+    my $class = shift;
+
+    croak "No options supported for 'no namespace::local'"
+        if @_;
+
+    croak "'no namespace::local' called but namespace::local isn't active"
+        unless @stack;
+
+    my $command = pop @stack;
+    $command->execute;
 };
 
 =head1 ENVIRONMENT
@@ -315,6 +346,10 @@ sub set_next {
         if $self->{next} and !$self->{next}{done};
 
     $self->{next} = $next;
+};
+
+sub is_done {
+    return $_[0]->{done};
 };
 
 sub DESTROY {
