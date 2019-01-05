@@ -4,7 +4,7 @@ use warnings FATAL => 'all';
 
 package namespace::local;
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 =head1 NAME
 
@@ -115,6 +115,8 @@ L<namespace::local> instance in action:
     # private not available here, even though the scope didn't end!
 
 No options are currently supported.
+
+B<EXPERIMENTAL>.
 
 =head1 OPTIONS
 
